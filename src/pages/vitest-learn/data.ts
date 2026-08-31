@@ -1,6 +1,7 @@
 /**
  * Vitest 学习平台 - 数据定义
  */
+import type { Quiz } from './types';
 
 export interface Lesson {
   key: string;
@@ -9,6 +10,14 @@ export interface Lesson {
   code: string;
   solution?: string;
   tips?: string[];
+  /** M4：TDD 模式下的可见测试文件（同时作为主校验）。设置后该课时进入 TDD 模式：用户编辑实现，测试由 grader 提供 */
+  grader?: string;
+  /** M4：额外隐藏校验（不展示给用户，用于防作弊 / 强化验证） */
+  hiddenGrader?: string;
+  /** M5：知识小测 */
+  quiz?: Quiz[];
+  /** M6：运行环境。设为 'jsdom' 时，测试文件顶部注入 `// @vitest-environment jsdom` 并使用 .tsx（React 组件测试） */
+  environment?: 'jsdom';
 }
 
 export interface Chapter {
@@ -68,7 +77,19 @@ test('add function should return correct sum', () => {
           'expect() 接收实际值，返回匹配器对象',
           'toBe() 是严格相等匹配器，使用 Object.is 比较',
           'it() 是 test() 的别名，语义更自然'
-        ]
+        ],
+        quiz: [
+          {
+            question: 'Vitest 中用于定义测试用例的两个等价函数是？',
+            options: ['test() 与 it()', 'describe() 与 expect()', 'assert() 与 should()', 'run() 与 check()'],
+            answer: 0,
+          },
+          {
+            question: 'toBe(3) 使用的是哪种相等判断？',
+            options: ['== 宽松相等', 'Object.is 严格相等', 'JSON 字符串比较', '深比较'],
+            answer: 1,
+          },
+        ],
       },
       {
         key: 'matchers-basic',
@@ -3629,5 +3650,595 @@ describe('When NOT to Write Tests', () => {
         ]
       }
     ]
-  }
+  },
+  {
+    key: 'tdd-practice',
+    title: '第十四章：TDD 实战演练',
+    description: '红—绿—重构：先看会失败的测试，再写实现让它通过，并用隐藏校验验证你是否真的掌握',
+    lessons: [
+      {
+        key: 'tdd-fizzbuzz',
+        title: '14.1 TDD：实现 FizzBuzz',
+        description: '经典 TDD 练习。先阅读下方给定的测试用例，然后在编辑器中实现 fizzBuzz，让它全部通过。',
+        code: `// TDD 练习：实现 fizzBuzz
+// 规则：
+// - 能同时被 3 和 5 整除 -> 'FizzBuzz'
+// - 能被 3 整除        -> 'Fizz'
+// - 能被 5 整除        -> 'Buzz'
+// - 否则返回数字本身（字符串形式）
+export function fizzBuzz(n: number): string {
+  // TODO: 实现你的逻辑
+  return String(n);
+}
+`,
+        solution: `export function fizzBuzz(n: number): string {
+  if (n % 15 === 0) return 'FizzBuzz';
+  if (n % 3 === 0) return 'Fizz';
+  if (n % 5 === 0) return 'Buzz';
+  return String(n);
+}
+`,
+        grader: `import { fizzBuzz } from './lesson';
+
+describe('fizzBuzz', () => {
+  test('非 3/5 倍数返回数字本身', () => {
+    expect(fizzBuzz(1)).toBe('1');
+    expect(fizzBuzz(2)).toBe('2');
+    expect(fizzBuzz(4)).toBe('4');
+  });
+
+  test('3 的倍数返回 Fizz', () => {
+    expect(fizzBuzz(3)).toBe('Fizz');
+    expect(fizzBuzz(6)).toBe('Fizz');
+  });
+
+  test('5 的倍数返回 Buzz', () => {
+    expect(fizzBuzz(5)).toBe('Buzz');
+    expect(fizzBuzz(10)).toBe('Buzz');
+  });
+
+  test('15 的倍数返回 FizzBuzz', () => {
+    expect(fizzBuzz(15)).toBe('FizzBuzz');
+    expect(fizzBuzz(30)).toBe('FizzBuzz');
+  });
+});
+`,
+        hiddenGrader: `import { fizzBuzz } from './lesson';
+
+describe('fizzBuzz 隐藏校验', () => {
+  test('覆盖更多边界', () => {
+    expect(fizzBuzz(7)).toBe('7');
+    expect(fizzBuzz(9)).toBe('Fizz');
+    expect(fizzBuzz(20)).toBe('Buzz');
+    expect(fizzBuzz(45)).toBe('FizzBuzz');
+    expect(fizzBuzz(98)).toBe('98');
+  });
+
+  test('实现必须具有真实逻辑（不能用查表蒙混）', () => {
+    for (let i = 1; i <= 100; i++) {
+      const r = fizzBuzz(i);
+      if (i % 15 === 0) expect(r).toBe('FizzBuzz');
+      else if (i % 3 === 0) expect(r).toBe('Fizz');
+      else if (i % 5 === 0) expect(r).toBe('Buzz');
+      else expect(r).toBe(String(i));
+    }
+  });
+});
+`,
+        tips: [
+          'TDD 节奏：先让测试变红（失败），再写最小实现变绿',
+          '先用最简单的方式通过，再考虑重构',
+          '隐藏校验会检查 1~100 的全部情况，硬编码几组答案是行不通的'
+        ],
+        quiz: [
+          {
+            question: 'TDD 的经典三步节奏是？',
+            options: ['红—绿—重构', '写—测—删', '设计—编码—发布', '分支—合并—部署'],
+            answer: 0,
+          },
+          {
+            question: '为什么需要“隐藏校验”？',
+            options: ['让页面更美观', '防止只针对可见测试硬编码答案', '加快运行速度', '替代可见测试'],
+            answer: 1,
+          },
+        ],
+      },
+      {
+        key: 'tdd-anagram',
+        title: '14.2 TDD：判断变位词',
+        description: '实现 isAnagram(a, b)：判断两个字符串是否为变位词（组成字母与数量相同、顺序可不同）。忽略大小写与空格。',
+        code: `// TDD 练习：实现 isAnagram
+// 判断两个字符串是否为变位词（组成字母相同、数量相同，顺序可不同）
+// 忽略大小写，忽略空格
+export function isAnagram(a: string, b: string): boolean {
+  // TODO: 实现你的逻辑
+  return false;
+}
+`,
+        solution: `export function isAnagram(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/\\s/g, '').split('').sort().join('');
+  return norm(a) === norm(b);
+}
+`,
+        grader: `import { isAnagram } from './lesson';
+
+describe('isAnagram', () => {
+  test('是变位词', () => {
+    expect(isAnagram('listen', 'silent')).toBe(true);
+    expect(isAnagram('rail safety', 'fairy tales')).toBe(true);
+  });
+
+  test('不是变位词', () => {
+    expect(isAnagram('hello', 'world')).toBe(false);
+    expect(isAnagram('a', 'aa')).toBe(false);
+  });
+
+  test('忽略大小写与空格', () => {
+    expect(isAnagram('Tom Marvolo Riddle', 'I am Lord Voldemort')).toBe(true);
+  });
+});
+`,
+        hiddenGrader: `import { isAnagram } from './lesson';
+
+describe('isAnagram 隐藏校验', () => {
+  test('更多用例', () => {
+    expect(isAnagram('', '')).toBe(true);
+    expect(isAnagram('abc', 'cba')).toBe(true);
+    expect(isAnagram('abc', 'cbb')).toBe(false);
+    expect(isAnagram('aab', 'abb')).toBe(false);
+  });
+
+  test('不能靠固定返回蒙混', () => {
+    expect(isAnagram('xyz', 'zyx')).toBe(true);
+    expect(isAnagram('xyz', 'zzz')).toBe(false);
+  });
+});
+`,
+        tips: [
+          '思路：把两个字符串归一化（转小写、去空格、排序）后比较',
+          '空字符串互为变位词',
+          '字母数量必须一致，多一个少一个都不行'
+        ],
+        quiz: [
+          {
+            question: '判断变位词的关键步骤是？',
+            options: ['比较字符串长度', '归一化后比较字符构成', '比较首字母', '反转字符串'],
+            answer: 1,
+          },
+        ],
+      },
+      {
+        key: 'tdd-leapyear',
+        title: '14.3 TDD：判断闰年',
+        description: '实现 isLeapYear(year)：闰年规则——能被 400 整除，或能被 4 整除但不能被 100 整除。',
+        code: `// TDD 练习：实现 isLeapYear
+// 闰年规则：
+// - 能被 400 整除           -> true
+// - 能被 100 整除（但非400） -> false
+// - 能被 4 整除              -> true
+// - 其他                     -> false
+export function isLeapYear(year: number): boolean {
+  // TODO: 实现你的逻辑
+  return false;
+}
+`,
+        solution: `export function isLeapYear(year: number): boolean {
+  if (year % 400 === 0) return true;
+  if (year % 100 === 0) return false;
+  return year % 4 === 0;
+}
+`,
+        grader: `import { isLeapYear } from './lesson';
+
+describe('isLeapYear', () => {
+  test('能被 400 整除是闰年', () => {
+    expect(isLeapYear(2000)).toBe(true);
+    expect(isLeapYear(1600)).toBe(true);
+  });
+
+  test('能被 100 但不能被 400 整除不是闰年', () => {
+    expect(isLeapYear(1900)).toBe(false);
+    expect(isLeapYear(2100)).toBe(false);
+  });
+
+  test('能被 4 整除但不能被 100 整除是闰年', () => {
+    expect(isLeapYear(2024)).toBe(true);
+    expect(isLeapYear(2020)).toBe(true);
+  });
+
+  test('不能被 4 整除不是闰年', () => {
+    expect(isLeapYear(2023)).toBe(false);
+    expect(isLeapYear(2021)).toBe(false);
+  });
+});
+`,
+        hiddenGrader: `import { isLeapYear } from './lesson';
+
+describe('isLeapYear 隐藏校验', () => {
+  test('更多边界', () => {
+    expect(isLeapYear(2400)).toBe(true);
+    expect(isLeapYear(1800)).toBe(false);
+    expect(isLeapYear(1996)).toBe(true);
+    expect(isLeapYear(1)).toBe(false);
+  });
+
+  test('不能靠固定返回蒙混', () => {
+    expect(isLeapYear(2000)).toBe(true);
+    expect(isLeapYear(1900)).toBe(false);
+    expect(isLeapYear(2024)).toBe(true);
+    expect(isLeapYear(2023)).toBe(false);
+  });
+});
+`,
+        tips: [
+          '先判 400，再判 100，最后判 4，顺序很重要',
+          '能被 100 整除的年份大多是“世纪年”，只有能被 400 整除才是闰年',
+          '不要漏掉边界：如 1900 不是闰年，2000 是闰年'
+        ],
+        quiz: [
+          {
+            question: '下列关于闰年的说法正确的是？',
+            options: ['能被 4 整除就是闰年', '能被 100 整除一定不是闰年', '能被 400 整除是闰年', '每 4 年一定有一个闰年'],
+            answer: 2,
+          },
+        ],
+      },
+      {
+        key: 'tdd-palindrome',
+        title: '14.4 TDD：判断回文',
+        description: '实现 isPalindrome(s)：判断字符串是否为回文（正读反读一致），忽略大小写与非字母数字字符。',
+        code: `// TDD 练习：实现 isPalindrome
+// 判断字符串是否为回文（正读反读一致）
+// 忽略大小写，忽略非字母数字字符
+export function isPalindrome(s: string): boolean {
+  // TODO: 实现你的逻辑
+  return false;
+}
+`,
+        solution: `export function isPalindrome(s: string): boolean {
+  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return cleaned === cleaned.split('').reverse().join('');
+}
+`,
+        grader: `import { isPalindrome } from './lesson';
+
+describe('isPalindrome', () => {
+  test('是回文', () => {
+    expect(isPalindrome('level')).toBe(true);
+    expect(isPalindrome('racecar')).toBe(true);
+    expect(isPalindrome('A man a plan a canal Panama')).toBe(true);
+  });
+
+  test('不是回文', () => {
+    expect(isPalindrome('hello')).toBe(false);
+    expect(isPalindrome('abc')).toBe(false);
+  });
+
+  test('忽略大小写与符号', () => {
+    expect(isPalindrome('Noon')).toBe(true);
+    expect(isPalindrome('Able was I ere I saw Elba')).toBe(true);
+  });
+});
+`,
+        hiddenGrader: `import { isPalindrome } from './lesson';
+
+describe('isPalindrome 隐藏校验', () => {
+  test('更多用例', () => {
+    expect(isPalindrome('')).toBe(true);
+    expect(isPalindrome('a')).toBe(true);
+    expect(isPalindrome('ab')).toBe(false);
+    expect(isPalindrome('abba')).toBe(true);
+    expect(isPalindrome('12321')).toBe(true);
+  });
+
+  test('不能靠固定返回蒙混', () => {
+    expect(isPalindrome('step on no pets')).toBe(true);
+    expect(isPalindrome('hello world')).toBe(false);
+  });
+});
+`,
+        tips: [
+          '先归一化：转小写、去掉非字母数字，再判断正反向是否相等',
+          '空字符串视为回文',
+          '可以用双指针从两端向中间比较，避免生成反转字符串'
+        ],
+        quiz: [
+          {
+            question: '判断回文时通常需要先做哪一步？',
+            options: ['排序', '归一化（去符号/统一大小写）', '反转整个字符串再比较长度', '转大写即可'],
+            answer: 1,
+          },
+        ],
+      },
+      {
+        key: 'tdd-caesar',
+        title: '14.5 TDD：凯撒密码',
+        description: '实现 caesarCipher(str, shift)：把英文字母向前平移 shift 位。只平移字母、保留大小写、非字母字符原样保留；平移越过 z 回到 a；shift 可为负数。',
+        code: `// TDD 练习：实现 caesarCipher
+// 凯撒密码：把英文字母向前平移 shift 位
+// 规则：只平移字母，保留大小写；非字母字符原样保留；
+//       平移超过 z 回到 a；shift 可为负数（反向平移）
+export function caesarCipher(str: string, shift: number): string {
+  // TODO: 实现你的逻辑
+  return str;
+}
+`,
+        solution: `export function caesarCipher(str: string, shift: number): string {
+  const shiftChar = (code: number, start: number) =>
+    start + (((code - start + shift) % 26) + 26) % 26;
+  return str
+    .split('')
+    .map((ch) => {
+      const code = ch.charCodeAt(0);
+      if (code >= 65 && code <= 90) return String.fromCharCode(shiftChar(code, 65));
+      if (code >= 97 && code <= 122) return String.fromCharCode(shiftChar(code, 97));
+      return ch;
+    })
+    .join('');
+}
+`,
+        grader: `import { caesarCipher } from './lesson';
+
+describe('caesarCipher', () => {
+  test('向后平移', () => {
+    expect(caesarCipher('abc', 1)).toBe('bcd');
+    expect(caesarCipher('xyz', 1)).toBe('yza');
+  });
+
+  test('保留大小写', () => {
+    expect(caesarCipher('ABC', 1)).toBe('BCD');
+    expect(caesarCipher('AbC', 2)).toBe('CdE');
+  });
+
+  test('非字母字符原样保留', () => {
+    expect(caesarCipher('a b!', 1)).toBe('b c!');
+    expect(caesarCipher('Hello, World!', 3)).toBe('Khoor, Zruog!');
+  });
+
+  test('负数 shift 反向平移', () => {
+    expect(caesarCipher('bcd', -1)).toBe('abc');
+  });
+});
+`,
+        hiddenGrader: `import { caesarCipher } from './lesson';
+
+describe('caesarCipher 隐藏校验', () => {
+  test('更多用例', () => {
+    expect(caesarCipher('', 5)).toBe('');
+    expect(caesarCipher('Z', 1)).toBe('A');
+    expect(caesarCipher('m', 13)).toBe('z');
+    expect(caesarCipher('Attack at dawn', 5)).toBe('Fyyfhp fy ifbs');
+  });
+
+  test('不能靠原样返回蒙混', () => {
+    expect(caesarCipher('abc', 3)).toBe('def');
+    expect(caesarCipher('abc', 3)).not.toBe('abc');
+  });
+});
+`,
+        tips: [
+          '用取模运算处理“越过字母表末尾绕回”的情况',
+          '只对字母做平移，先判断 ASCII 范围（A-Z / a-z）',
+          '负数 shift 表示反向平移，取模时记得先 +26 再取模避免负数'
+        ],
+        quiz: [
+          {
+            question: '凯撒密码处理“越过 z 绕回 a”通常用？',
+            options: ['if 判断分支', '取模运算', '字符串拼接', '递归'],
+            answer: 1,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'react-testing',
+    title: '第十五章：React 组件测试（jsdom）',
+    description: '在 jsdom 环境中用 @testing-library/react 测试 React 组件：渲染、交互与受控输入。课时已给定测试，请你实现组件让它通过。',
+    lessons: [
+      {
+        key: 'rt-greeting',
+        title: '15.1 渲染组件',
+        description: '实现 Greeting 组件：接收 name 属性，渲染 <h1>Hello, {name}!</h1>。用 render + getByText 验证。',
+        environment: 'jsdom',
+        code: `import { type FC } from 'react';
+
+export const Greeting: FC<{ name: string }> = ({ name }) => {
+  // TODO: 返回 <h1>Hello, {name}!</h1>
+  return null;
+};
+`,
+        solution: `import { type FC } from 'react';
+
+export const Greeting: FC<{ name: string }> = ({ name }) => {
+  return <h1>Hello, {name}!</h1>;
+};
+`,
+        grader: `import { render, screen } from '@testing-library/react';
+import { describe, test, expect } from 'vitest';
+import { Greeting } from './lesson';
+
+describe('Greeting', () => {
+  test('渲染问候语', () => {
+    render(<Greeting name="Vitest" />);
+    expect(screen.getByText('Hello, Vitest!')).toBeTruthy();
+  });
+});
+`,
+        hiddenGrader: `import { render, screen } from '@testing-library/react';
+import { describe, test, expect } from 'vitest';
+import { Greeting } from './lesson';
+
+describe('Greeting 隐藏校验', () => {
+  test('不同名字', () => {
+    render(<Greeting name="World" />);
+    expect(screen.getByText('Hello, World!')).toBeTruthy();
+  });
+
+  test('空名字', () => {
+    render(<Greeting name="" />);
+    expect(screen.getByText('Hello, !')).toBeTruthy();
+  });
+});
+`,
+        tips: [
+          '用 render(<Comp />) 把组件挂载到 jsdom 的文档中',
+          'screen.getByText(...) 找不到文本会直接抛错，从而让测试失败',
+          '组件名需与测试导入一致（这里导出 Greeting）'
+        ],
+        quiz: [
+          {
+            question: '在 @testing-library/react 中，把组件挂载到 DOM 通常用？',
+            options: ['mount()', 'render()', 'attach()', 'display()'],
+            answer: 1,
+          },
+        ],
+      },
+      {
+        key: 'rt-counter',
+        title: '15.2 状态与事件',
+        description: '实现 Counter 组件：渲染一个按钮，文字为 "count is {n}"（n 初始 0），点击按钮 n+1。用 fireEvent 触发点击。',
+        environment: 'jsdom',
+        code: `import { useState, type FC } from 'react';
+
+export const Counter: FC = () => {
+  const [count, setCount] = useState(0);
+  // TODO: 渲染 <button>，文字为 \`count is \${count}\`
+  //       点击时 setCount(count + 1)
+  return null;
+};
+`,
+        solution: `import { useState, type FC } from 'react';
+
+export const Counter: FC = () => {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(count + 1)}>count is {count}</button>;
+};
+`,
+        grader: `import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, test, expect } from 'vitest';
+import { Counter } from './lesson';
+
+describe('Counter', () => {
+  test('初始为 0，点击后加 1', () => {
+    render(<Counter />);
+    const btn = screen.getByRole('button', { name: /count is 0/i });
+    expect(btn).toBeTruthy();
+    fireEvent.click(btn);
+    expect(screen.getByRole('button', { name: /count is 1/i })).toBeTruthy();
+  });
+});
+`,
+        hiddenGrader: `import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, test, expect } from 'vitest';
+import { Counter } from './lesson';
+
+describe('Counter 隐藏校验', () => {
+  test('连续点击三次', () => {
+    render(<Counter />);
+    const btn = screen.getByRole('button');
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(screen.getByText(/count is 3/i)).toBeTruthy();
+  });
+
+  test('不能靠常量蒙混', () => {
+    render(<Counter />);
+    const btn = screen.getByRole('button');
+    fireEvent.click(btn);
+    expect(screen.queryByText(/count is 0/i)).toBeNull();
+  });
+});
+`,
+        tips: [
+          'useState 提供状态与更新函数',
+          'fireEvent.click(btn) 模拟一次用户点击',
+          '按钮的可访问名称（accessible name）包含其文本内容'
+        ],
+        quiz: [
+          {
+            question: '模拟一次按钮点击应优先使用？',
+            options: ['btn.click()', 'fireEvent.click(btn)', 'dispatch(click)', 'trigger(btn)'],
+            answer: 1,
+          },
+        ],
+      },
+      {
+        key: 'rt-mirror',
+        title: '15.3 受控输入',
+        description: '实现 Mirror 组件：渲染一个 <input> 和一个 <p>，让 <p> 实时显示 input 的当前值（受控组件）。',
+        environment: 'jsdom',
+        code: `import { useState, type FC } from 'react';
+
+export const Mirror: FC = () => {
+  const [value, setValue] = useState('');
+  // TODO: 渲染 <input>（受控）与 <p>，
+  //       <p> 实时显示 input 的当前值
+  return null;
+};
+`,
+        solution: `import { useState, type FC } from 'react';
+
+export const Mirror: FC = () => {
+  const [value, setValue] = useState('');
+  return (
+    <>
+      <input value={value} onChange={(e) => setValue(e.target.value)} />
+      <p>{value}</p>
+    </>
+  );
+};
+`,
+        grader: `import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, test, expect } from 'vitest';
+import { Mirror } from './lesson';
+
+describe('Mirror', () => {
+  test('输入内容实时回显', () => {
+    render(<Mirror />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Vitest' } });
+    expect(screen.getByText('Vitest')).toBeTruthy();
+  });
+});
+`,
+        hiddenGrader: `import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, test, expect } from 'vitest';
+import { Mirror } from './lesson';
+
+describe('Mirror 隐藏校验', () => {
+  test('更新输入内容', () => {
+    render(<Mirror />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Hello' } });
+    expect(screen.getByText('Hello')).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'World' } });
+    expect(screen.getByText('World')).toBeTruthy();
+  });
+
+  test('不能固定显示常量', () => {
+    render(<Mirror />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'abc' } });
+    expect(screen.queryByText('xyz')).toBeNull();
+  });
+});
+`,
+        tips: [
+          '受控组件：value 来自 state，onChange 把新值写回 state',
+          "getByRole('textbox') 可定位 input",
+          'fireEvent.change(input, { target: { value } }) 触发受控更新'
+        ],
+        quiz: [
+          {
+            question: '受控组件的 input 值应该来自？',
+            options: ['DOM 自身', 'React state', '随机数', 'ref'],
+            answer: 1,
+          },
+        ],
+      },
+    ],
+  },
 ];

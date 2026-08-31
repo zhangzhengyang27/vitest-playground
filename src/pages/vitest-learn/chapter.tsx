@@ -1,238 +1,143 @@
 /**
  * Vitest 学习平台 - 章节详情页面
- * 包含代码编辑器和测试运行功能
+ * 包含：Monaco 代码编辑器 + 真实 Vitest 运行 + 进度持久化 + 知识小测。
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button, Space, message, Alert, Tag, Divider, Typography, Card, Row, Col } from 'antd';
 import {
-  PlayCircleOutlined,
   LeftOutlined,
   RightOutlined,
   BulbOutlined,
   CheckCircleOutlined,
-  CopyOutlined,
   ThunderboltOutlined,
   BookOutlined,
   FileTextOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { chapters } from './data';
-import { useCodeExecution } from './sandbox';
+import { useRealVitest, type RunOptions } from './runner';
+import CodeEditor from './CodeEditor';
+import QuizCard from './Quiz';
+import {
+  getLessonProgress,
+  setLessonProgress,
+  isLessonPassed,
+} from './progress';
+import type { TestResult } from './types';
 import styles from './chapter.module.css';
 
-// 动态导入 highlight.js
-let hljs: typeof import('highlight.js').default | null = null;
-
-const { Paragraph, Text } = Typography;
-
-interface TestResult {
-  status: 'idle' | 'running' | 'success' | 'error';
-  output: string;
-  duration?: string;
-  passed?: number;
-  failed?: number;
-}
-
-const CodeEditor: React.FC<{
-  value: string;
-  onChange: (value: string) => void;
-  onRun: () => void;
-  result: TestResult;
-  isReady?: boolean;
-}> = ({ value, onChange, onRun, result, isReady = true }) => {
-  const [copied, setCopied] = useState(false);
-  const [highlightedCode, setHighlightedCode] = useState('');
-  const [hljsReady, setHljsReady] = useState(false);
-
-  // 初始化 highlight.js
-  useEffect(() => {
-    import('highlight.js').then((module) => {
-      hljs = module.default;
-      hljs.configure({ ignoreUnescapedHTML: true });
-      setHljsReady(true);
-    });
-  }, []);
-
-  // 语法高亮
-  useEffect(() => {
-    if (hljsReady && value && hljs) {
-      const highlighted = hljs.highlight(value, { language: 'javascript' });
-      setHighlightedCode(highlighted.value);
-    }
-  }, [value, hljsReady]);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    message.success('代码已复制');
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getResultClass = () => {
-    switch (result.status) {
-      case 'success':
-        return styles.resultSuccess;
-      case 'error':
-        return styles.resultError;
-      default:
-        return '';
-    }
-  };
-
-  const getResultTitle = () => {
-    switch (result.status) {
-      case 'running':
-        return '运行中...';
-      case 'success':
-        return (
-          <>
-            <CheckCircleOutlined /> 测试通过
-          </>
-        );
-      case 'error':
-        return '测试失败';
-      default:
-        return '测试结果';
-    }
-  };
-
-  return (
-    <div className={styles.editorContainer}>
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarLeft}>
-          <span className={styles.fileIcon}>📄</span>
-          <span className={styles.toolbarTitle}>test.ts</span>
-          <span className={styles.langTag}>TypeScript</span>
-        </div>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            onClick={onRun}
-            loading={result.status === 'running'}
-            disabled={!isReady}
-          >
-            运行测试
-          </Button>
-          <Button icon={<CopyOutlined />} onClick={handleCopy}>
-            {copied ? '已复制' : '复制'}
-          </Button>
-        </Space>
-      </div>
-
-      {/* Code Input */}
-      <div className={styles.codeInput}>
-        <pre className={styles.codePre}>
-          <code
-            className={`hljs language-javascript ${styles.codeContent}`}
-            dangerouslySetInnerHTML={{ __html: highlightedCode || value }}
-          />
-        </pre>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={styles.codeTextarea}
-          spellCheck={false}
-          placeholder="在此输入代码..."
-          onKeyDown={(e) => {
-            if (e.key === 'Tab') {
-              e.preventDefault();
-              const start = e.currentTarget.selectionStart;
-              const end = e.currentTarget.selectionEnd;
-              const newValue = value.substring(0, start) + '  ' + value.substring(end);
-              onChange(newValue);
-              setTimeout(() => {
-                e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
-              }, 0);
-            }
-          }}
-        />
-      </div>
-
-      {/* Result Panel */}
-      <div className={`${styles.resultPanel} ${getResultClass()}`}>
-        <div className={styles.resultHeader}>
-          <span className={styles.resultTitle}>{getResultTitle()}</span>
-          {result.duration && (
-            <span className={styles.resultDuration}>{result.duration}</span>
-          )}
-          {result.passed !== undefined && result.failed !== undefined && (
-            <span className={styles.resultStats}>
-              <Tag color="success">{result.passed} 通过</Tag>
-              {result.failed > 0 && <Tag color="error">{result.failed} 失败</Tag>}
-            </span>
-          )}
-        </div>
-        <pre className={styles.resultOutput}>
-          {result.output || '点击"运行测试"查看结果'}
-        </pre>
-      </div>
-    </div>
-  );
-};
+const { Text } = Typography;
 
 const LessonPage: React.FC = () => {
   const params = useParams<{ chapterKey: string; lessonKey?: string }>();
   const { chapterKey, lessonKey } = params;
   const navigate = useNavigate();
-  const { runCode, isReady } = useCodeExecution();
+  const { runCode, isReady } = useRealVitest();
 
   const chapter = chapters.find((c) => c.key === chapterKey);
   // 如果没有 lessonKey，使用第一个课时
   const effectiveLessonKey = lessonKey || chapter?.lessons[0]?.key;
   const currentLessonIndex = chapter?.lessons.findIndex((l) => l.key === effectiveLessonKey) ?? 0;
   const currentLesson = chapter?.lessons[currentLessonIndex];
+  // TDD 课时：存在 grader（可见测试）即进入 TDD 模式，用户编辑实现，测试由 grader 提供
+  const isTDD = !!currentLesson?.grader;
+  // jsdom 课时（React 组件测试）：用户编辑 .tsx 组件，测试文件为 .spec.tsx
+  const isJsdom = currentLesson?.environment === 'jsdom';
+  const editorFileName = isTDD
+    ? isJsdom ? 'lesson.tsx' : 'lesson.ts'
+    : 'lesson.spec.ts';
+  const graderFileName = isJsdom ? 'lesson.spec.tsx' : 'lesson.spec.ts';
 
   const [code, setCode] = useState(currentLesson?.code || '');
   const [result, setResult] = useState<TestResult>({ status: 'idle', output: '' });
   const [showSolution, setShowSolution] = useState(false);
 
-  // 当切换课时时重置状态
+  // 当切换课时时：恢复已保存代码 / 重置状态
   useEffect(() => {
     const lesson = chapter?.lessons.find((l) => l.key === effectiveLessonKey);
-    setCode(lesson?.code || '');
+    const saved = chapterKey && effectiveLessonKey
+      ? getLessonProgress(chapterKey, effectiveLessonKey).code
+      : undefined;
+    setCode(saved ?? lesson?.code ?? '');
     setResult({ status: 'idle', output: '' });
     setShowSolution(false);
-  }, [effectiveLessonKey, chapter]);
+  }, [effectiveLessonKey, chapterKey, chapter]);
+
+  const handleCodeChange = useCallback(
+    (value: string) => {
+      setCode(value);
+      if (chapterKey && effectiveLessonKey) {
+        setLessonProgress(chapterKey, effectiveLessonKey, { code: value });
+      }
+    },
+    [chapterKey, effectiveLessonKey],
+  );
+
+  const handleReset = useCallback(() => {
+    setCode(currentLesson?.code ?? '');
+    if (chapterKey && effectiveLessonKey) {
+      setLessonProgress(chapterKey, effectiveLessonKey, { code: currentLesson?.code ?? '' });
+    }
+    message.info('已重置为初始代码');
+  }, [currentLesson, chapterKey, effectiveLessonKey]);
 
   const handleRunTest = useCallback(() => {
-    setResult({ status: 'running', output: '正在编译运行...' });
+    if (!chapterKey || !effectiveLessonKey || !currentLesson) return;
+    setResult({ status: 'running', output: '准备运行环境...\n' });
 
     const codeToRun = showSolution && currentLesson?.solution
       ? currentLesson.solution
       : code;
 
-    runCode(codeToRun).then((runResult) => {
-      if (runResult.success) {
-        setResult({
-          status: 'success',
-          output: runResult.output || `✓ 通过 ${runResult.passed} 个测试`,
-          duration: `${runResult.passed + runResult.failed}ms`,
-          passed: runResult.passed,
-          failed: runResult.failed,
-        });
-        message.success('测试全部通过！');
-      } else {
+    const runOpts: RunOptions = isTDD
+      ? {
+          userCode: codeToRun,
+          userFileName: isJsdom ? 'lesson.tsx' : 'lesson.ts',
+          testCode: currentLesson.grader ?? '',
+          hiddenCode: currentLesson.hiddenGrader,
+          jsdom: isJsdom,
+        }
+      : { userCode: codeToRun, hiddenCode: currentLesson.grader, jsdom: isJsdom };
+
+    // 实时回传安装/运行进度，避免一直停留在一句话
+    runOpts.onProgress = (chunk: string) => {
+      setResult((r) => ({ ...r, output: r.output + chunk }));
+    };
+
+    runCode(runOpts)
+      .then((runResult) => {
+        if (runResult.success) {
+          setResult({
+            status: 'success',
+            output: runResult.output,
+            passed: runResult.passed,
+            failed: runResult.failed,
+          });
+          setLessonProgress(chapterKey, effectiveLessonKey, {
+            status: 'passed',
+            lastRunAt: Date.now(),
+          });
+          message.success('测试全部通过！');
+        } else {
+          setResult({
+            status: 'error',
+            output: runResult.output,
+            passed: runResult.passed || 0,
+            failed: runResult.failed || 1,
+          });
+          message.error('有测试未通过');
+        }
+      })
+      .catch((err: Error) => {
         setResult({
           status: 'error',
-          output: runResult.output || runResult.error || '测试失败',
-          duration: '0ms',
-          passed: runResult.passed || 0,
-          failed: runResult.failed || 1,
+          output: `运行错误: ${err.message}`,
+          passed: 0,
+          failed: 1,
         });
-        message.error('有测试未通过');
-      }
-    }).catch((err) => {
-      setResult({
-        status: 'error',
-        output: `运行错误: ${err.message}`,
-        duration: '0ms',
-        passed: 0,
-        failed: 1,
       });
-    });
-  }, [code, showSolution, currentLesson, runCode]);
+  }, [code, showSolution, currentLesson, isTDD, runCode, chapterKey, effectiveLessonKey]);
 
   if (!chapter) {
     return (
@@ -280,20 +185,26 @@ const LessonPage: React.FC = () => {
                 <FileTextOutlined /> 课时列表
               </h3>
               <div className={styles.lessonList}>
-                {chapter.lessons.map((lesson, index) => (
-                  <Card
-                    key={lesson.key}
-                    className={`${styles.lessonCard} ${lesson.key === effectiveLessonKey ? styles.lessonCardActive : ''}`}
-                    size="small"
-                    hoverable
-                    onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
-                  >
-                    <div className={styles.lessonCardContent}>
-                      <span className={styles.lessonNumber}>{index + 1}</span>
-                      <span className={styles.lessonCardTitle}>{lesson.title}</span>
-                    </div>
-                  </Card>
-                ))}
+                {chapter.lessons.map((lesson, index) => {
+                  const passed = isLessonPassed(chapter.key, lesson.key);
+                  return (
+                    <Card
+                      key={lesson.key}
+                      className={`${styles.lessonCard} ${lesson.key === effectiveLessonKey ? styles.lessonCardActive : ''}`}
+                      size="small"
+                      hoverable
+                      onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
+                    >
+                      <div className={styles.lessonCardContent}>
+                        <span className={styles.lessonNumber}>{index + 1}</span>
+                        <span className={styles.lessonCardTitle}>{lesson.title}</span>
+                        {passed && (
+                          <CheckCircleOutlined className={styles.lessonPassedIcon} />
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </Col>
@@ -325,21 +236,46 @@ const LessonPage: React.FC = () => {
                       }
                     />
                   )}
+
+                  {/* 知识小测（M5） */}
+                  {currentLesson.quiz && currentLesson.quiz.length > 0 && (
+                    <QuizCard quizzes={currentLesson.quiz} />
+                  )}
                 </>
               )}
 
-              {/* 代码编辑器 */}
+              {/* TDD 模式：展示可见测试（只读），用户据此实现 */}
+              {isTDD && currentLesson.grader && (
+                <div className={styles.tddTestHint}>
+                  📋 下面是已给定的测试用例（只读）。请在下方编辑实现，让它们全部通过：
+                </div>
+              )}
+              {isTDD && currentLesson.grader && (
+                <CodeEditor
+                  value={currentLesson.grader}
+                  fileName={graderFileName}
+                  language="typescript"
+                  readOnly
+                  onChange={() => {}}
+                  onRun={() => {}}
+                  result={{ status: 'idle', output: '' }}
+                  isReady={isReady}
+                />
+              )}
+
+              {/* 代码编辑器（M1：Monaco） */}
               <CodeEditor
                 value={showSolution && currentLesson?.solution ? currentLesson.solution : code}
-                onChange={setCode}
+                onChange={handleCodeChange}
                 onRun={handleRunTest}
                 result={result}
                 isReady={isReady}
+                fileName={editorFileName}
               />
 
-              {/* Solution Toggle */}
-              {currentLesson?.solution && (
-                <div className={styles.solutionToggle}>
+              {/* Solution / Reset Toggle */}
+              <div className={styles.solutionToggle}>
+                <Space wrap>
                   <Button
                     type="primary"
                     ghost={!showSolution}
@@ -348,11 +284,14 @@ const LessonPage: React.FC = () => {
                   >
                     {showSolution ? '隐藏参考答案' : '查看参考答案'}
                   </Button>
-                  <Text type="secondary" className={styles.solutionHint}>
-                    （先自己尝试，再看答案效果更好）
-                  </Text>
-                </div>
-              )}
+                  <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                    重置代码
+                  </Button>
+                </Space>
+                <Text type="secondary" className={styles.solutionHint}>
+                  （先自己尝试，再看答案效果更好）
+                </Text>
+              </div>
 
               {/* Navigation */}
               <div className={styles.navigation}>
@@ -396,17 +335,21 @@ const LessonPage: React.FC = () => {
       <div className={styles.chapterProgress}>
         <Text type="secondary" className={styles.progressLabel}>本章进度：</Text>
         <div className={styles.progressTags}>
-          {chapter.lessons.map((lesson, index) => (
-            <Tag
-              key={lesson.key}
-              color={lesson.key === effectiveLessonKey ? 'blue' : 'default'}
-              className={styles.progressTagItem}
-              onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
-            >
-              <span className={styles.lessonIndex}>{index + 1}</span>
-              {lesson.title}
-            </Tag>
-          ))}
+          {chapter.lessons.map((lesson, index) => {
+            const passed = isLessonPassed(chapter.key, lesson.key);
+            return (
+              <Tag
+                key={lesson.key}
+                color={passed ? 'success' : lesson.key === effectiveLessonKey ? 'blue' : 'default'}
+                className={styles.progressTagItem}
+                onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
+              >
+                <span className={styles.lessonIndex}>{index + 1}</span>
+                {passed && '✓ '}
+                {lesson.title}
+              </Tag>
+            );
+          })}
         </div>
       </div>
     </Card>

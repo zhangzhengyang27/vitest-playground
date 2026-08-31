@@ -578,3 +578,103 @@
 :global(.hljs-deletion) {
   color: #ce9178;
 }
+
+/* Monaco 编辑器容器 */
+.monacoWrap {
+  background: #1e1e1e;
+  border-top: 1px solid #3c3c3c;
+}
+
+/* 结果统计 */
+.statPassed {
+  color: #4caf50;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.statFailed {
+  color: #f44336;
+  font-size: 12px;
+}
+
+/* 课时已通过标记 */
+.lessonPassedIcon {
+  margin-left: auto;
+  color: #52c41a;
+  font-size: 14px;
+}
+
+/* 知识小测卡片 */
+.quizCard {
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.quizItem {
+  padding: 10px 0;
+  border-bottom: 1px dashed #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+.quizQuestion {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #262626;
+  line-height: 1.5;
+}
+
+.quizIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  background: #1890ff;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.quizFeedback {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.quizCorrect {
+  color: #52c41a;
+}
+
+.quizWrong {
+  color: #f44336;
+}
+
+.quizSubmit {
+  margin-top: 8px;
+}
+
+/* TDD 只读标签 */
+.readonlyTag {
+  background: #5a4a1f;
+  color: #ffd666;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* TDD 测试提示 */
+.tddTestHint {
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #fff7e6 0%, #ffe7ba 100%);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #874d00;
+  line-height: 1.5;
+}
