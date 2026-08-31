@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["vitest/globals", "node", "vite/client"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@root/*": ["./*"]
+    }
+  },
+  "include": [
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/vite-env.d.ts",
+    "src/pages/vitest-learn/**/*",
+    "tests/**/*",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
+}

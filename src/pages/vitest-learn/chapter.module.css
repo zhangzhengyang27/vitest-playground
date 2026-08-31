@@ -1,0 +1,580 @@
+/* 全局页面样式 */
+.pageContainer {
+  padding: 0;
+  margin: 0;
+  background: #f5f7fa;
+}
+
+/* Header 样式 */
+.header {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  color: #fff;
+  padding: 16px 32px 20px;
+  border-radius: 0;
+}
+
+.backButton {
+  color: rgba(255, 255, 255, 0.85) !important;
+  margin-bottom: 8px;
+
+  &:hover {
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.headerContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.headerIcon {
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.15);
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  flex: 1;
+
+  h1 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+  }
+}
+
+/* 主内容区域 */
+.mainContent {
+  padding: 20px 24px;
+  background: #fff;
+  min-height: 500px;
+}
+
+/* 左侧课时列表 */
+.lessonListPanel {
+  margin-bottom: 16px;
+}
+
+.lessonListTitle {
+  font-size: 14px;
+  color: #595959;
+  margin-bottom: 12px;
+  font-weight: 500;
+
+  :global(.anticon) {
+    margin-right: 6px;
+  }
+}
+
+.lessonList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 4px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #d9d9d9;
+    border-radius: 3px;
+
+    &:hover {
+      background: #bfbfbf;
+    }
+  }
+}
+
+.lessonCard {
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid #e8e8e8;
+
+  &:hover {
+    border-color: #1890ff;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+  }
+}
+
+.lessonCardActive {
+  border-color: #1890ff;
+  background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%);
+
+  .lessonNumber {
+    background: #1890ff;
+    color: #fff;
+  }
+}
+
+.lessonCardContent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lessonNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #f0f0f0;
+  color: #595959;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.lessonCardTitle {
+  font-size: 13px;
+  color: #262626;
+}
+
+/* 右侧编辑器面板 */
+.editorPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.currentLessonInfo {
+  margin-bottom: 4px;
+}
+
+.lessonTitle {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #262626;
+}
+
+.lessonDesc {
+  margin: 0;
+  color: #595959;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 学习提示 */
+.tips {
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%);
+
+  :global(.ant-alert-icon) {
+    color: #1890ff;
+  }
+}
+
+.tipsList {
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+
+  li {
+    margin-bottom: 4px;
+    color: #434343;
+    font-size: 13px;
+    line-height: 1.5;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+/* 参考答案切换 */
+.solutionToggle {
+  padding: 12px 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.solutionHint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+/* 导航按钮 */
+.navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+}
+
+.progressTag {
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
+/* Editor 样式 */
+.editorContainer {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1e1e1e;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fileIcon {
+  font-size: 14px;
+}
+
+.toolbarTitle {
+  color: #cccccc;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.langTag {
+  background: #3c3c3c;
+  color: #8b8b8b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.codeInput {
+  position: relative;
+  min-height: 300px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.codePre {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 14px;
+  background: #1e1e1e;
+  overflow: auto;
+  pointer-events: none;
+}
+
+.codeContent {
+  display: block;
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d4d4d4;
+  white-space: pre;
+  background: transparent;
+}
+
+.codeTextarea {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 300px;
+  max-height: 400px;
+  padding: 14px;
+  border: none;
+  background: transparent;
+  color: transparent;
+  caret-color: #d4d4d4;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+
+  &::placeholder {
+    color: #666;
+  }
+}
+
+.resultPanel {
+  border-top: 1px solid #3c3c3c;
+  background: #1e1e1e;
+}
+
+.resultHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.resultTitle {
+  color: #cccccc;
+  font-size: 13px;
+
+  :global(.anticon) {
+    margin-right: 4px;
+  }
+}
+
+.resultSuccess .resultTitle {
+  color: #4caf50;
+}
+
+.resultError .resultTitle {
+  color: #f44336;
+}
+
+.resultDuration {
+  color: #808080;
+  font-size: 11px;
+}
+
+.resultStats {
+  display: flex;
+  gap: 4px;
+}
+
+.resultOutput {
+  margin: 0;
+  padding: 12px 14px;
+  color: #d4d4d4;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.resultSuccess .resultOutput {
+  color: #4caf50;
+}
+
+.resultError .resultOutput {
+  color: #f44336;
+}
+
+/* 分隔线 */
+.divider {
+  margin: 0;
+  border-color: #f0f0f0;
+}
+
+/* 章节进度 */
+.chapterProgress {
+  padding: 16px 24px 20px;
+  background: #fff;
+}
+
+.progressLabel {
+  font-size: 12px;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.progressTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.progressTagItem {
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.lessonIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: rgba(24, 144, 255, 0.1);
+  color: #1890ff;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+/* Not Found */
+.notFound {
+  text-align: center;
+  padding: 48px;
+
+  h2 {
+    margin-bottom: 24px;
+    color: #595959;
+  }
+}
+
+/* 响应式适配 */
+@media (max-width: 991px) {
+  .mainContent {
+    padding: 16px;
+  }
+
+  .header {
+    padding: 12px 16px 16px;
+  }
+
+  .headerIcon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .headerTitle h1 {
+    font-size: 18px;
+  }
+
+  .chapterProgress {
+    padding: 16px;
+  }
+}
+
+/* highlight.js 主题覆盖 */
+:global(.hljs) {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+:global(.hljs-keyword) {
+  color: #569cd6;
+}
+
+:global(.hljs-string) {
+  color: #ce9178;
+}
+
+:global(.hljs-number) {
+  color: #b5cea8;
+}
+
+:global(.hljs-comment) {
+  color: #6a9955;
+  font-style: italic;
+}
+
+:global(.hljs-function) {
+  color: #dcdcaa;
+}
+
+:global(.hljs-title) {
+  color: #dcdcaa;
+}
+
+:global(.hljs-params) {
+  color: #9cdcfe;
+}
+
+:global(.hljs-built_in) {
+  color: #4ec9b0;
+}
+
+:global(.hljs-attr) {
+  color: #9cdcfe;
+}
+
+:global(.hljs-literal) {
+  color: #569cd6;
+}
+
+:global(.hljs-variable) {
+  color: #9cdcfe;
+}
+
+:global(.hljs-template-variable) {
+  color: #9cdcfe;
+}
+
+:global(.hljs-type) {
+  color: #4ec9b0;
+}
+
+:global(.hljs-class) {
+  color: #4ec9b0;
+}
+
+:global(.hljs-tag) {
+  color: #569cd6;
+}
+
+:global(.hljs-name) {
+  color: #4ec9b0;
+}
+
+:global(.hljs-selector-class) {
+  color: #d7ba7d;
+}
+
+:global(.hljs-selector-id) {
+  color: #d7ba7d;
+}
+
+:global(.hljs-attribute) {
+  color: #9cdcfe;
+}
+
+:global(.hljs-symbol) {
+  color: #d19a66;
+}
+
+:global(.hljs-bullet) {
+  color: #d19a66;
+}
+
+:global(.hljs-addition) {
+  color: #b5cea8;
+}
+
+:global(.hljs-deletion) {
+  color: #ce9178;
+}
