@@ -1,19 +1,28 @@
 /**
- * Vitest 学习平台 - 章节详情页面
- * 包含：Monaco 代码编辑器 + 真实 Vitest 运行 + 进度持久化 + 知识小测。
+ * Vitest 学习平台 - 章节学习工作台
+ * 布局：面包屑 + 章节总览 + 左侧课时导航（sticky）+ 右侧学习内容（信息分区）。
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Space, message, Alert, Tag, Divider, Typography, Card, Row, Col } from 'antd';
+import {
+  Button,
+  Space,
+  message,
+  Alert,
+  Tag,
+  Typography,
+  Progress,
+  Breadcrumb,
+} from 'antd';
 import {
   LeftOutlined,
   RightOutlined,
   BulbOutlined,
   CheckCircleOutlined,
   ThunderboltOutlined,
-  BookOutlined,
-  FileTextOutlined,
   ReloadOutlined,
+  ExperimentOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons';
 import { chapters } from './data';
 import { useRealVitest, type RunOptions } from './runner';
@@ -25,6 +34,7 @@ import {
   isLessonPassed,
 } from './progress';
 import type { TestResult } from './types';
+import AppLayout from '../../components/AppLayout';
 import styles from './chapter.module.css';
 
 const { Text } = Typography;
@@ -52,6 +62,14 @@ const LessonPage: React.FC = () => {
   const [code, setCode] = useState(currentLesson?.code || '');
   const [result, setResult] = useState<TestResult>({ status: 'idle', output: '' });
   const [showSolution, setShowSolution] = useState(false);
+
+  // 章节整体进度
+  const chapterPassedCount = chapter
+    ? chapter.lessons.filter((l) => isLessonPassed(chapter.key, l.key)).length
+    : 0;
+  const chapterPercent = chapter?.lessons.length
+    ? Math.round((chapterPassedCount / chapter.lessons.length) * 100)
+    : 0;
 
   // 当切换课时时：恢复已保存代码 / 重置状态
   useEffect(() => {
@@ -97,8 +115,14 @@ const LessonPage: React.FC = () => {
           testCode: currentLesson.grader ?? '',
           hiddenCode: currentLesson.hiddenGrader,
           jsdom: isJsdom,
+          extraFiles: currentLesson.extraFiles,
         }
-      : { userCode: codeToRun, hiddenCode: currentLesson.grader, jsdom: isJsdom };
+      : {
+          userCode: codeToRun,
+          hiddenCode: currentLesson.grader,
+          jsdom: isJsdom,
+          extraFiles: currentLesson.extraFiles,
+        };
 
     // 实时回传安装/运行进度，避免一直停留在一句话
     runOpts.onProgress = (chunk: string) => {
@@ -141,159 +165,216 @@ const LessonPage: React.FC = () => {
 
   if (!chapter) {
     return (
-      <Card>
+      <AppLayout>
         <div className={styles.notFound}>
           <h2>章节未找到</h2>
-          <Button type="primary" onClick={() => navigate('/vitest-learn')}>
+          <Button type="primary" onClick={() => navigate('/')}>
             返回首页
           </Button>
         </div>
-      </Card>
+      </AppLayout>
     );
   }
 
   return (
-    <Card className={styles.pageContainer}>
-      {/* Header */}
-      <div className={styles.header}>
-        <Button
-          type="text"
-          icon={<LeftOutlined />}
-          onClick={() => navigate('/vitest-learn')}
-          className={styles.backButton}
-        >
-          返回目录
-        </Button>
-        <div className={styles.headerContent}>
-          <div className={styles.headerIcon}>
-            <BookOutlined />
-          </div>
-          <div className={styles.headerTitle}>
-            <h1>{chapter.title}</h1>
-            <p>{chapter.description}</p>
+    <AppLayout>
+      {/* ===== 面包屑 ===== */}
+      <Breadcrumb
+        className={styles.breadcrumb}
+        items={[
+          { title: <a onClick={() => navigate('/')}>课程中心</a> },
+          { title: chapter.title },
+          { title: currentLesson?.title },
+        ]}
+      />
+
+      {/* ===== 章节总览 ===== */}
+      <section className={styles.chapterOverview}>
+        <div className={styles.chapterOverviewLeft}>
+          <h1 className={styles.chapterTitle}>{chapter.title}</h1>
+          <p className={styles.chapterDesc}>{chapter.description}</p>
+          <div className={styles.chapterTags}>
+            <Tag icon={<ExperimentOutlined />} className={styles.chapterTag}>
+              {chapter.lessons.length} 个课时
+            </Tag>
+            <Tag
+              icon={<TrophyOutlined />}
+              color={chapterPassedCount === chapter.lessons.length ? 'success' : 'default'}
+              className={styles.chapterTag}
+            >
+              {chapterPassedCount}/{chapter.lessons.length} 已通关
+            </Tag>
           </div>
         </div>
-      </div>
+        <div className={styles.chapterOverviewRight}>
+          <Progress
+            type="circle"
+            percent={chapterPercent}
+            size={72}
+            strokeColor={{ '0%': '#2563eb', '100%': '#7c3aed' }}
+          />
+        </div>
+      </section>
 
-      {/* Main Content */}
-      <div className={styles.mainContent}>
-        <Row gutter={24}>
-          {/* 左侧：课时列表 */}
-          <Col xs={24} lg={8}>
-            <div className={styles.lessonListPanel}>
-              <h3 className={styles.lessonListTitle}>
-                <FileTextOutlined /> 课时列表
-              </h3>
-              <div className={styles.lessonList}>
-                {chapter.lessons.map((lesson, index) => {
-                  const passed = isLessonPassed(chapter.key, lesson.key);
-                  return (
-                    <Card
-                      key={lesson.key}
-                      className={`${styles.lessonCard} ${lesson.key === effectiveLessonKey ? styles.lessonCardActive : ''}`}
-                      size="small"
-                      hoverable
-                      onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
-                    >
-                      <div className={styles.lessonCardContent}>
-                        <span className={styles.lessonNumber}>{index + 1}</span>
-                        <span className={styles.lessonCardTitle}>{lesson.title}</span>
-                        {passed && (
-                          <CheckCircleOutlined className={styles.lessonPassedIcon} />
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          </Col>
-
-          {/* 右侧：学习内容 + 代码编辑器 */}
-          <Col xs={24} lg={16}>
-            <div className={styles.editorPanel}>
-              {/* 当前课时信息 */}
-              {currentLesson && (
-                <>
-                  <div className={styles.currentLessonInfo}>
-                    <h2 className={styles.lessonTitle}>{currentLesson.title}</h2>
-                    <p className={styles.lessonDesc}>{currentLesson.description}</p>
-                  </div>
-
-                  {/* Tips */}
-                  {currentLesson.tips && currentLesson.tips.length > 0 && (
-                    <Alert
-                      type="info"
-                      icon={<BulbOutlined />}
-                      title="学习提示"
-                      className={styles.tips}
-                      description={
-                        <ul className={styles.tipsList}>
-                          {currentLesson.tips.map((tip, i) => (
-                            <li key={i}>{tip}</li>
-                          ))}
-                        </ul>
-                      }
-                    />
-                  )}
-
-                  {/* 知识小测（M5） */}
-                  {currentLesson.quiz && currentLesson.quiz.length > 0 && (
-                    <QuizCard quizzes={currentLesson.quiz} />
-                  )}
-                </>
-              )}
-
-              {/* TDD 模式：展示可见测试（只读），用户据此实现 */}
-              {isTDD && currentLesson.grader && (
-                <div className={styles.tddTestHint}>
-                  📋 下面是已给定的测试用例（只读）。请在下方编辑实现，让它们全部通过：
+      {/* ===== 工作台：左侧课时导航 + 右侧学习内容 ===== */}
+      <div className={styles.workbench}>
+        {/* 左侧课时导航 */}
+        <aside className={styles.sidebar}>
+          <div className={styles.sidebarHeader}>
+            <span className={styles.sidebarTitle}>课时进度</span>
+            <span className={styles.sidebarCount}>
+              {chapterPassedCount}/{chapter.lessons.length}
+            </span>
+          </div>
+          <Progress
+            percent={chapterPercent}
+            size="small"
+            strokeColor="#2563eb"
+            className={styles.sidebarProgress}
+            showInfo={false}
+          />
+          <div className={styles.lessonList}>
+            {chapter.lessons.map((lesson, index) => {
+              const passed = isLessonPassed(chapter.key, lesson.key);
+              const active = lesson.key === effectiveLessonKey;
+              return (
+                <div
+                  key={lesson.key}
+                  className={`${styles.lessonItem} ${active ? styles.lessonItemActive : ''}`}
+                  onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === 'Enter' && navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)
+                  }
+                >
+                  <span
+                    className={`${styles.lessonIndex} ${
+                      passed ? styles.lessonIndexPassed : ''
+                    } ${active ? styles.lessonIndexActive : ''}`}
+                  >
+                    {passed ? <CheckCircleOutlined /> : index + 1}
+                  </span>
+                  <span className={styles.lessonItemTitle}>{lesson.title}</span>
+                  {active && <RightOutlined className={styles.lessonItemArrow} />}
                 </div>
-              )}
-              {isTDD && currentLesson.grader && (
-                <CodeEditor
-                  value={currentLesson.grader}
-                  fileName={graderFileName}
-                  language="typescript"
-                  readOnly
-                  onChange={() => {}}
-                  onRun={() => {}}
-                  result={{ status: 'idle', output: '' }}
-                  isReady={isReady}
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* 右侧学习内容 */}
+        <main className={styles.content}>
+          {currentLesson && (
+            <>
+              {/* 课时信息 */}
+              <section className={styles.lessonInfo}>
+                <div className={styles.lessonInfoHead}>
+                  <h2 className={styles.lessonTitle}>{currentLesson.title}</h2>
+                  <div className={styles.lessonBadges}>
+                    {isTDD && (
+                      <Tag color="gold" className={styles.lessonBadge}>
+                        TDD 实战
+                      </Tag>
+                    )}
+                    {isJsdom && (
+                      <Tag color="geekblue" className={styles.lessonBadge}>
+                        React + jsdom
+                      </Tag>
+                    )}
+                    {!isJsdom && (
+                      <Tag className={styles.lessonBadge}>Node 环境</Tag>
+                    )}
+                  </div>
+                </div>
+                <p className={styles.lessonDesc}>{currentLesson.description}</p>
+              </section>
+
+              {/* 学习提示 */}
+              {currentLesson.tips && currentLesson.tips.length > 0 && (
+                <Alert
+                  type="info"
+                  icon={<BulbOutlined />}
+                  showIcon
+                  title="学习提示"
+                  className={styles.tips}
+                  description={
+                    <ul className={styles.tipsList}>
+                      {currentLesson.tips.map((tip, i) => (
+                        <li key={i}>{tip}</li>
+                      ))}
+                    </ul>
+                  }
                 />
               )}
 
-              {/* 代码编辑器（M1：Monaco） */}
-              <CodeEditor
-                value={showSolution && currentLesson?.solution ? currentLesson.solution : code}
-                onChange={handleCodeChange}
-                onRun={handleRunTest}
-                result={result}
-                isReady={isReady}
-                fileName={editorFileName}
-              />
+              {/* 知识小测 */}
+              {currentLesson.quiz && currentLesson.quiz.length > 0 && (
+                <QuizCard quizzes={currentLesson.quiz} />
+              )}
 
-              {/* Solution / Reset Toggle */}
-              <div className={styles.solutionToggle}>
-                <Space wrap>
-                  <Button
-                    type="primary"
-                    ghost={!showSolution}
-                    icon={<ThunderboltOutlined />}
-                    onClick={() => setShowSolution(!showSolution)}
-                  >
-                    {showSolution ? '隐藏参考答案' : '查看参考答案'}
-                  </Button>
-                  <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                    重置代码
-                  </Button>
-                </Space>
-                <Text type="secondary" className={styles.solutionHint}>
-                  （先自己尝试，再看答案效果更好）
-                </Text>
-              </div>
+              {/* 代码练习区 */}
+              <section className={styles.practiceCard}>
+                <div className={styles.practiceHeader}>
+                  <span className={styles.practiceIcon}>
+                    <ThunderboltOutlined />
+                  </span>
+                  <div>
+                    <h3 className={styles.practiceTitle}>动手练习</h3>
+                    <p className={styles.practiceDesc}>
+                      {isTDD
+                        ? '下面是已给定的测试用例（只读），请在编辑器中实现让它们全部通过。'
+                        : '在编辑器中编写测试代码，点击「运行测试」验证结果。'}
+                    </p>
+                  </div>
+                </div>
 
-              {/* Navigation */}
+                {/* TDD 模式：展示可见测试（只读） */}
+                {isTDD && currentLesson.grader && (
+                  <CodeEditor
+                    value={currentLesson.grader}
+                    fileName={graderFileName}
+                    language="typescript"
+                    readOnly
+                    onChange={() => {}}
+                    onRun={() => {}}
+                    result={{ status: 'idle', output: '' }}
+                    isReady={isReady}
+                  />
+                )}
+
+                {/* 代码编辑器 */}
+                <CodeEditor
+                  value={showSolution && currentLesson?.solution ? currentLesson.solution : code}
+                  onChange={handleCodeChange}
+                  onRun={handleRunTest}
+                  result={result}
+                  isReady={isReady}
+                  fileName={editorFileName}
+                />
+
+                {/* 操作区 */}
+                <div className={styles.solutionToggle}>
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      ghost={!showSolution}
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => setShowSolution(!showSolution)}
+                    >
+                      {showSolution ? '隐藏参考答案' : '查看参考答案'}
+                    </Button>
+                    <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                      重置代码
+                    </Button>
+                  </Space>
+                  <Text type="secondary" className={styles.solutionHint}>
+                    （先自己尝试，再看答案效果更好）
+                  </Text>
+                </div>
+              </section>
+
+              {/* 上下课时导航 */}
               <div className={styles.navigation}>
                 <Button
                   icon={<LeftOutlined />}
@@ -307,12 +388,11 @@ const LessonPage: React.FC = () => {
                 >
                   上一节
                 </Button>
-
-                <Tag color="blue" className={styles.progressTag}>
+                <span className={styles.navigationCenter}>
                   {currentLessonIndex + 1} / {chapter.lessons.length}
-                </Tag>
-
+                </span>
                 <Button
+                  type={currentLessonIndex >= chapter.lessons.length - 1 ? 'default' : 'primary'}
                   icon={<RightOutlined />}
                   disabled={currentLessonIndex >= chapter.lessons.length - 1}
                   onClick={() => {
@@ -325,34 +405,11 @@ const LessonPage: React.FC = () => {
                   下一节
                 </Button>
               </div>
-            </div>
-          </Col>
-        </Row>
+            </>
+          )}
+        </main>
       </div>
-
-      {/* Chapter Progress */}
-      <Divider className={styles.divider} />
-      <div className={styles.chapterProgress}>
-        <Text type="secondary" className={styles.progressLabel}>本章进度：</Text>
-        <div className={styles.progressTags}>
-          {chapter.lessons.map((lesson, index) => {
-            const passed = isLessonPassed(chapter.key, lesson.key);
-            return (
-              <Tag
-                key={lesson.key}
-                color={passed ? 'success' : lesson.key === effectiveLessonKey ? 'blue' : 'default'}
-                className={styles.progressTagItem}
-                onClick={() => navigate(`/vitest-learn/${chapter.key}/${lesson.key}`)}
-              >
-                <span className={styles.lessonIndex}>{index + 1}</span>
-                {passed && '✓ '}
-                {lesson.title}
-              </Tag>
-            );
-          })}
-        </div>
-      </div>
-    </Card>
+    </AppLayout>
   );
 };
 

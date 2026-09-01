@@ -34,7 +34,7 @@ const QuizCard: React.FC<QuizCardProps> = ({ quizzes }) => {
               disabled={done}
               onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
             >
-              <Space direction="vertical">
+              <Space orientation="vertical">
                 {q.options.map((opt, oi) => (
                   <Radio key={oi} value={oi}>
                     {opt}

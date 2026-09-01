@@ -57,6 +57,8 @@ export interface RunOptions {
   jsdom?: boolean;
   /** 进度回调：保留兼容字段 */
   onProgress?: (chunk: string) => void;
+  /** 额外写入沙箱的文件（如 vi.mock 所需的真实模块），键为相对文件名，值为内容 */
+  extraFiles?: Record<string, string>;
 }
 
 /**
@@ -84,6 +86,12 @@ export function useRealVitest() {
       files[`lesson.spec.${ext}`] = pragma + opts.userCode;
       if (opts.hiddenCode && opts.hiddenCode.trim()) {
         files[`lesson.hidden.spec.${ext}`] = pragma + opts.hiddenCode;
+      }
+    }
+    // 额外文件（如 vi.mock 所需的真实模块文件）
+    if (opts.extraFiles) {
+      for (const [name, contents] of Object.entries(opts.extraFiles)) {
+        files[name] = contents;
       }
     }
     return runVitest(files, !!opts.jsdom);

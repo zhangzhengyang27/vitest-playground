@@ -18,6 +18,8 @@ export interface Lesson {
   quiz?: Quiz[];
   /** M6：运行环境。设为 'jsdom' 时，测试文件顶部注入 `// @vitest-environment jsdom` 并使用 .tsx（React 组件测试） */
   environment?: 'jsdom';
+  /** 额外写入运行沙箱的文件（如 vi.mock 所需的真实模块），键为相对文件名，值为内容 */
+  extraFiles?: Record<string, string>;
 }
 
 export interface Chapter {
@@ -182,6 +184,17 @@ test('common matchers demo', () => {
 
 // 只运行包含指定名称的测试
 // vitest -t "add function"
+
+// 下面用真实用例演示各种运行方式的效果
+describe('Vitest CLI Commands', () => {
+  test('vitest run - 单次运行测试', () => {
+    expect(true).toBe(true);
+  });
+
+  test('vitest -t "demo" 只运行匹配的测试', () => {
+    expect('demo').toContain('demo');
+  });
+});
 `,
         solution: `// 常用命令速查
 describe('Vitest CLI Commands', () => {
@@ -522,6 +535,15 @@ test('mock API calls', async () => {
   expect(await getUser(1)).toEqual({ id: 1, name: 'Bob' });
   expect(await getUser(2)).toEqual({ id: 2, name: 'Carol' });
 });`,
+        // vi.mock 需要模块真实可解析，故额外提供一个 api 模块文件供 mock 替换
+        extraFiles: {
+          'api.ts': `// 真实 API 模块（测试中会被 vi.mock 替换）
+export const fetchUser = (id: number) => Promise.resolve({ id, name: \`User \${id}\` });
+export const getUser = (id: number) => Promise.resolve({ id, name: \`User \${id}\` });
+export const createUser = (data: { name: string }) => Promise.resolve({ id: 99, ...data });
+export const deleteUser = (id: number) => Promise.resolve(true);
+`,
+        },
         tips: [
           'vi.mock() 会提升到文件顶部自动执行',
           '使用 mockResolvedValue 模拟异步成功',
@@ -1224,10 +1246,13 @@ test('advance timers by time', () => {
   vi.advanceTimersByTime(150);
   expect(fn).toHaveBeenCalledTimes(1);
 
-  vi.advanceTimersByTime(150);
+  vi.advanceTimersByTime(50); // 累计 200ms，触发第 2 个
   expect(fn).toHaveBeenCalledTimes(2);
 
-  vi.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(100); // 累计 300ms，触发第 3 个
+  expect(fn).toHaveBeenCalledTimes(3);
+
+  vi.advanceTimersByTime(1000); // 全部触发完，不再变化
   expect(fn).toHaveBeenCalledTimes(3);
 });
 
@@ -1395,9 +1420,9 @@ test('system time manipulation', () => {
   const tomorrow = new Date('2024-06-16T12:00:00Z');
   expect(Date.now()).toBe(tomorrow.getTime());
 
-  // 设置为相对时间
-  vi.setSystemTime(Date.now() - 1000); // 1秒前
-  expect(Date.now()).toBe(fixedDate.getTime() - 1000);
+  // 设置为相对时间（基于推进后的当前时间回拨 1 秒）
+  vi.setSystemTime(Date.now() - 1000);
+  expect(Date.now()).toBe(tomorrow.getTime() - 1000);
 });
 
 test('date-based scheduling', () => {
@@ -1450,8 +1475,13 @@ test('snapshot basic', () => {
 test('inline snapshot', () => {
   const user = { name: 'Bob', age: 25 };
 
-  // 快照会显示在这里
-  expect(user).toMatchInlineSnapshot();
+  // 快照内容直接内联在断言处
+  expect(user).toMatchInlineSnapshot(\`
+    {
+      "age": 25,
+      "name": "Bob",
+    }
+  \`);
 });
 `,
         solution: `// 快照测试完整示例
@@ -1473,16 +1503,17 @@ test('toMatchSnapshot', () => {
 
 test('toMatchSnapshot with property matchers', () => {
   const user = {
-    id: expect.any(Number),
+    id: 1,
     name: 'Carol',
-    createdAt: expect.any(Date),
-    token: expect.any(String)
-  };
-
-  expect(user).toMatchSnapshot({
-    id: 1,  // 快照期望的 id
     createdAt: new Date('2024-01-01'),
     token: 'abc123'
+  };
+
+  // 对动态值使用 matcher，避免快照因时间/随机值频繁失效
+  expect(user).toMatchSnapshot({
+    id: expect.any(Number),
+    createdAt: expect.any(Date),
+    token: expect.any(String)
   });
 });
 
@@ -1493,10 +1524,16 @@ test('toMatchInlineSnapshot', () => {
   };
 
   // Vitest 会自动填充快照内容
-  expect(data).toMatchInlineSnapshot({
-    items: ['a', 'b', 'c'],
-    count: 3
-  });
+  expect(data).toMatchInlineSnapshot(\`
+    {
+      "count": 3,
+      "items": [
+        "a",
+        "b",
+        "c",
+      ],
+    }
+  \`);
 });`,
         tips: [
           '首次运行会创建 .snap 文件',
@@ -1550,15 +1587,15 @@ describe('Snapshot Update', () => {
 
   test('property matchers for dynamic values', () => {
     const session = {
-      id: expect.any(String),
-      createdAt: expect.any(Date),
+      id: 'session-123',
+      createdAt: new Date('2024-01-01'),
       data: { key: 'value' }
     };
 
     // 动态值用 matchers，避免频繁更新
     expect(session).toMatchSnapshot({
-      id: 'session-123',
-      createdAt: new Date('2024-01-01')
+      id: expect.any(String),
+      createdAt: expect.any(Date)
     });
   });
 });`,
@@ -1644,8 +1681,8 @@ describe('String Operations', () => {
 describe('Edge Cases', () => {
   test.each([
     { input: '', expected: true },
-    { input: '   ', expected: false },
-    { input: 'a', expected: true }
+    { input: '   ', expected: true }, // 全空格 trim 后为空字符串
+    { input: 'a', expected: false }
   ])('isEmpty: "$input" -> $expected', ({ input, expected }) => {
     expect(input.trim().length === 0).toBe(expected);
   });
@@ -1742,6 +1779,8 @@ test('custom matchers usage', () => {
         title: '8.3 测试配置和隔离',
         description: '全局设置和测试隔离策略',
         code: `// 测试配置和隔离
+let globalState;
+
 describe('isolated tests', () => {
   // 每个测试前重置状态
   beforeEach(() => {
@@ -2186,13 +2225,14 @@ class RealTimer {
 class FakeTimer {
   constructor() {
     this.currentTime = 0;
-    this.timers = [];
+    this.timers = []; // { id, callback, delay, nextAt }
     this.nextId = 0;
   }
 
   setInterval(callback, delay) {
     const id = ++this.nextId;
-    this.timers.push({ id, callback, delay });
+    // nextAt 记录下一次触发时间，避免重复触发
+    this.timers.push({ id, callback, delay, nextAt: delay });
     return id;
   }
 
@@ -2200,11 +2240,15 @@ class FakeTimer {
     this.timers = this.timers.filter(t => t.id !== id);
   }
 
-  // 辅助方法：前进时间
+  // 辅助方法：前进时间，仅触发到期的回调
   advance(ms) {
     this.currentTime += ms;
-    const dueTimers = this.timers.filter(t => t.delay <= this.currentTime);
-    dueTimers.forEach(t => t.callback());
+    this.timers.forEach(t => {
+      while (t.nextAt <= this.currentTime) {
+        t.callback();
+        t.nextAt += t.delay;
+      }
+    });
   }
 
   getTime() {
@@ -2267,9 +2311,9 @@ const dummyUser = {};
 const stubFn = vi.fn(() => 'fixed value');
 
 // 3. Spy - 监控调用，保留原行为
-const spy = vi.spyOn(obj, 'method');
-obj.method();
-expect(spy).toHaveBeenCalled();
+const obj = {
+  method: () => 'original'
+};
 
 // 4. Fake - 有简化实现的真实对象
 class FakeDB {
@@ -2284,6 +2328,25 @@ class FakeDB {
     return this.data.get(key);
   }
 }
+
+test('test doubles summary', () => {
+  // Stub：返回固定值
+  expect(stubFn()).toBe('fixed value');
+
+  // Spy：监控调用，保留原行为
+  const spy = vi.spyOn(obj, 'method');
+  expect(obj.method()).toBe('original');
+  expect(spy).toHaveBeenCalled();
+  spy.mockRestore();
+
+  // Fake：有状态的简化实现
+  const db = new FakeDB();
+  db.save('k', 'v');
+  expect(db.get('k')).toBe('v');
+
+  // Dummy：只是占位参数，不关心内容
+  expect(dummyUser).toBeDefined();
+});
 
 // 选择原则
 // - 只关心是否调用：Spy
@@ -2863,7 +2926,8 @@ export default defineConfig({
 // 两者几乎相同
 describe('Mock Comparison', () => {
   test('jest mock', () => {
-    const mockFn = jest.fn(() => 'mocked');
+    // Jest 中写作 jest.fn(() => 'mocked')，语法与 vi.fn 完全一致
+    const mockFn = vi.fn(() => 'mocked');
     mockFn();
     expect(mockFn).toHaveBeenCalled();
   });
@@ -2905,24 +2969,11 @@ describe('Mock Comparison', () => {
 // Jest: jest.fn()  ->  Vitest: vi.fn()
 // Jest: jest.spyOn() ->  Vitest: vi.spyOn()
 
-// Jest
-const mockFn = jest.fn();
-
-// Vitest
+// Vitest 写法
 const mockFn = vi.fn();
 
 // 2. Mock 模块
 // Jest: jest.mock()  ->  Vitest: vi.mock()
-
-// Jest
-jest.mock('./api', () => ({
-  fetchUser: jest.fn()
-}));
-
-// Vitest
-vi.mock('./api', () => ({
-  fetchUser: vi.fn()
-}));
 
 // 3. 恢复 Mock
 // Jest: jest.restoreAllMocks()  ->  Vitest: vi.restoreAllMocks()
@@ -2930,6 +2981,15 @@ vi.mock('./api', () => ({
 // 4. 定时器
 // Jest: jest.useFakeTimers()  ->  Vitest: vi.useFakeTimers()
 // Jest: jest.runAllTimers()  ->  Vitest: vi.runAllTimers()
+
+test('vitest 版 mock API', () => {
+  mockFn('a');
+  expect(mockFn).toHaveBeenCalledWith('a');
+
+  const spy = vi.spyOn({ greet: () => 'hi' }, 'greet');
+  expect(spy).not.toHaveBeenCalled();
+  spy.mockRestore();
+});
 `,
         solution: `// 完整迁移示例
 import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
@@ -3015,6 +3075,13 @@ npm install -D vitest
 npx vitest --config vite.config.ts
 */
 `,
+        // vi.mock 需要模块真实可解析，故额外提供一个 database 模块文件供 mock 替换
+        extraFiles: {
+          'database.ts': `// 真实数据库模块（测试中会被 vi.mock 替换）
+export const query = (sql: string) => [{ id: 1, name: 'Real data' }];
+export const connect = () => ({ connected: true });
+`,
+        },
         tips: [
           'Vitest 兼容 Jest 的大部分 API',
           '只需将 jest.fn() 改为 vi.fn()',
@@ -3172,6 +3239,16 @@ test('state verification', () => {
 });
 
 // 行为验证 - 检查方法是否被调用
+class Service {
+  constructor(notifier) {
+    this.notifier = notifier;
+  }
+
+  notify(message) {
+    this.notifier.send(message);
+  }
+}
+
 test('behavior verification', () => {
   const notifier = { send: vi.fn() };
   const service = new Service(notifier);
@@ -3320,7 +3397,41 @@ describe('State vs Behavior Verification', () => {
         key: 'solitary-sociable',
         title: '13.2 独居测试 vs 群居测试',
         description: 'Mock 所有依赖 vs 使用真实依赖',
-        code: `// 独居测试 (Solitary) - Mock 所有依赖
+        code: `// ===== 待测试的业务类 =====
+class RealInventoryService {
+  checkStock(productId) {
+    return productId > 0;
+  }
+}
+
+class RealEmailService {
+  sendEmail(to, subject) {
+    return true;
+  }
+}
+
+class OrderProcessor {
+  constructor(inventory, email) {
+    this.inventory = inventory;
+    this.email = email;
+    this.lastOrder = null;
+  }
+
+  processOrder(productId, quantity, email) {
+    if (!this.inventory.checkStock(productId)) {
+      throw new Error('Out of stock');
+    }
+    this.email.sendEmail(email, 'Order confirmed');
+    this.lastOrder = { productId, quantity };
+    return this.lastOrder;
+  }
+
+  getLastOrder() {
+    return this.lastOrder;
+  }
+}
+
+// 独居测试 (Solitary) - Mock 所有依赖
 describe('Solitary Testing', () => {
   test('processes order with mocks', () => {
     // Mock 所有依赖
@@ -3328,28 +3439,30 @@ describe('Solitary Testing', () => {
     const inventoryService = { checkStock: vi.fn().mockReturnValue(true) };
 
     // 使用 Mock 的服务
-    const processor = new OrderProcessor(emailService, inventoryService);
+    const processor = new OrderProcessor(inventoryService, emailService);
 
-    processor.processOrder({ productId: 1, quantity: 2 });
+    processor.processOrder(1, 2, 'test@example.com');
 
     // 验证行为
     expect(emailService.sendEmail).toHaveBeenCalled();
+    expect(inventoryService.checkStock).toHaveBeenCalledWith(1);
   });
 });
 
 // 群居测试 (Sociable) - 使用真实依赖
 describe('Sociable Testing', () => {
   test('processes order with real services', () => {
-    // 使用真实服务（可能有真实数据库/API 调用）
+    // 使用真实服务（无外部 I/O，运行快）
     const emailService = new RealEmailService();
     const inventoryService = new RealInventoryService();
 
-    const processor = new OrderProcessor(emailService, inventoryService);
+    const processor = new OrderProcessor(inventoryService, emailService);
 
-    processor.processOrder({ productId: 1, quantity: 2 });
+    processor.processOrder(1, 2, 'test@example.com');
 
     // 验证最终结果
     expect(processor.getLastOrder()).toBeDefined();
+    expect(processor.getLastOrder().productId).toBe(1);
   });
 });
 `,
@@ -3534,9 +3647,9 @@ class User {
 
 // 2. 第三方库的简单包装
 // 如果只是转发调用，不测试
-function isEqual(a, b) {
-  return _.isEqual(a, b);  // 测试 lodash 还是 isEqual？
-}
+// function isEqual(a, b) {
+//   return _.isEqual(a, b);  // 测试 lodash 还是 isEqual？
+// }
 
 // 3. 明显不重要的代码
 function log(message) {
@@ -3545,6 +3658,16 @@ function log(message) {
 
 // 4. 已经被其他测试覆盖
 // 单元测试 + 集成测试覆盖同一功能
+
+// 有实际逻辑的代码才需要测试
+function isAdult(age) {
+  return age >= 18;
+}
+
+test('只测试有逻辑的代码', () => {
+  expect(isAdult(18)).toBe(true);
+  expect(isAdult(17)).toBe(false);
+});
 `,
         solution: `// 不需要测试的代码 完整示例
 describe('When NOT to Write Tests', () => {

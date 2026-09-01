@@ -1,119 +1,334 @@
-.container {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
+/* ===== 主页（课程中心）样式 ===== */
 
+/* ---- Hero ---- */
 .hero {
   text-align: center;
-  padding: 48px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 64px 24px 48px;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% -10%, rgba(37, 99, 235, 0.12), transparent),
+    radial-gradient(ellipse 40% 40% at 85% 20%, rgba(124, 58, 237, 0.08), transparent);
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
+  background-color: #fff;
   margin-bottom: 32px;
-  color: white;
 }
 
-.title {
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 16px;
+.heroBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 20px;
 }
 
-.subtitle {
-  font-size: 18px;
-  opacity: 0.9;
-  margin-bottom: 24px;
+.heroBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2563eb;
 }
 
-.badges {
+.heroTitle {
+  margin: 0 0 16px;
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.5px;
+}
+
+.heroAccent {
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.heroSubtitle {
+  margin: 0 auto 28px;
+  max-width: 560px;
+  font-size: 16px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+.heroActions {
   display: flex;
-  gap: 12px;
   justify-content: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.badge {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
+.heroCta {
+  min-width: 140px;
 }
 
-/* 章节卡片列表 - 垂直列表布局 */
-.chapterList {
+.heroSecondary {
+  min-width: 140px;
+}
+
+/* Hero 统计 */
+.heroStats {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 36px;
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid #eef0f3;
+}
+
+.heroStat {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 2px;
+  min-width: 72px;
 }
 
-.chapterCard {
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid #f0f0f0;
-  border-radius: 12px;
+.heroStatValue {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1f2937;
+  line-height: 1.1;
 }
 
-.chapterCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(24, 144, 255, 0.15);
-  border-color: #1890ff;
-}
-
-.chapterContent {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 8px 0;
-}
-
-.chapterIcon {
-  font-size: 32px;
-  color: #1890ff;
-  background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%);
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.chapterInfo {
-  flex: 1;
-}
-
-.chapterTitle {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 6px;
-  color: #262626;
-}
-
-.chapterDesc {
+.heroStatLabel {
   font-size: 13px;
-  color: #595959;
-  margin-bottom: 8px;
-  line-height: 1.4;
+  color: #9ca3af;
 }
 
-.chapterMeta {
-  font-size: 12px;
-  color: #8c8c8c;
+.heroStatDivider {
+  width: 1px;
+  height: 36px;
+  background: #e5e7eb;
 }
 
-.features {
-  margin-top: 48px;
-  background: #fafafa;
-  padding: 24px;
-  border-radius: 12px;
+/* ---- 通用区块 ---- */
+.section {
+  margin-bottom: 32px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .sectionTitle {
-  font-size: 24px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.sectionHint {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* ---- 章节卡片网格 ---- */
+.chapterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.chapterCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    border-color: #bfdbfe;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1);
+  }
+}
+
+.chapterCardTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.chapterIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.chapterCardInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.chapterTitle {
+  margin: 0 0 6px;
+  font-size: 16px;
   font-weight: 600;
-  margin-bottom: 24px;
+  color: #1f2937;
+}
+
+.chapterDesc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chapterCardMeta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.chapterLessonsTag {
+  border-radius: 20px;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #4b5563;
+  font-size: 12px;
+  padding-inline: 10px;
+}
+
+.chapterPassedTag {
+  border-radius: 20px;
+  font-size: 12px;
+  padding-inline: 10px;
+}
+
+.chapterProgressRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chapterProgress {
+  flex: 1;
+  margin-inline-end: 0;
+}
+
+.chapterProgressText {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b5563;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* 整体进度条 */
+.totalProgress {
+  margin-top: 20px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.totalProgressText {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+/* ---- 学习特色 ---- */
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.featureCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 24px 20px;
   text-align: center;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  }
+}
+
+.featureIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 20px;
+  margin-bottom: 14px;
+}
+
+.featureTitle {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.featureDesc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+/* ---- 响应式 ---- */
+@media (max-width: 991px) {
+  .chapterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .featureGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroTitle {
+    font-size: 30px;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero {
+    padding: 40px 16px 32px;
+  }
+
+  .heroStats {
+    gap: 20px;
+  }
 }
