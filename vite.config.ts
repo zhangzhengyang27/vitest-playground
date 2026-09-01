@@ -49,6 +49,7 @@ export default defineConfig({
     },
   },
   preview: {
+    allowedHosts: ['vitest-playground.zhangzhengyang.com'],
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
