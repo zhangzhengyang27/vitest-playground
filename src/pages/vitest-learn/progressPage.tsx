@@ -9,7 +9,6 @@ import {
   TrophyOutlined,
   ReloadOutlined,
   DownloadOutlined,
-  ArrowLeftOutlined,
   CheckCircleTwoTone,
 } from '@ant-design/icons';
 import AppLayout from '../../components/AppLayout';
@@ -103,9 +102,6 @@ const ProgressPage: React.FC = () => {
             </Button>
             <Button icon={<DownloadOutlined />} onClick={handleExport}>
               导出进度
-            </Button>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
-              返回课程中心
             </Button>
           </div>
         </div>
