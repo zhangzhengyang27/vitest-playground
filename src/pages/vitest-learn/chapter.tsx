@@ -2,7 +2,7 @@
  * Vitest 学习平台 - 章节学习工作台
  * 布局：面包屑 + 章节总览 + 左侧课时导航（sticky）+ 右侧学习内容（信息分区）。
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Button,
@@ -13,6 +13,8 @@ import {
   Typography,
   Progress,
   Breadcrumb,
+  Switch,
+  Tabs,
 } from 'antd';
 import {
   LeftOutlined,
@@ -23,6 +25,7 @@ import {
   ReloadOutlined,
   ExperimentOutlined,
   TrophyOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { chapters } from './data';
 import { useRealVitest, type RunOptions } from './runner';
@@ -62,6 +65,7 @@ const LessonPage: React.FC = () => {
   const [code, setCode] = useState(currentLesson?.code || '');
   const [result, setResult] = useState<TestResult>({ status: 'idle', output: '' });
   const [showSolution, setShowSolution] = useState(false);
+  const [autoRun, setAutoRun] = useState(false);
 
   // 章节整体进度
   const chapterPassedCount = chapter
@@ -100,6 +104,17 @@ const LessonPage: React.FC = () => {
     message.info('已重置为初始代码');
   }, [currentLesson, chapterKey, effectiveLessonKey]);
 
+  const handleExport = useCallback(() => {
+    const content = showSolution && currentLesson?.solution ? currentLesson.solution : code;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = editorFileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [code, showSolution, currentLesson, editorFileName]);
+
   const handleRunTest = useCallback(() => {
     if (!chapterKey || !effectiveLessonKey || !currentLesson) return;
     setResult({ status: 'running', output: '准备运行环境...\n' });
@@ -116,12 +131,16 @@ const LessonPage: React.FC = () => {
           hiddenCode: currentLesson.hiddenGrader,
           jsdom: isJsdom,
           extraFiles: currentLesson.extraFiles,
+          coverage: !currentLesson.benchmark,
+          benchmark: !!currentLesson.benchmark,
         }
       : {
           userCode: codeToRun,
           hiddenCode: currentLesson.grader,
           jsdom: isJsdom,
           extraFiles: currentLesson.extraFiles,
+          coverage: !currentLesson.benchmark,
+          benchmark: !!currentLesson.benchmark,
         };
 
     // 实时回传安装/运行进度，避免一直停留在一句话
@@ -137,6 +156,9 @@ const LessonPage: React.FC = () => {
             output: runResult.output,
             passed: runResult.passed,
             failed: runResult.failed,
+            tests: runResult.tests,
+            markers: runResult.markers,
+            coverage: runResult.coverage,
           });
           setLessonProgress(chapterKey, effectiveLessonKey, {
             status: 'passed',
@@ -149,6 +171,9 @@ const LessonPage: React.FC = () => {
             output: runResult.output,
             passed: runResult.passed || 0,
             failed: runResult.failed || 1,
+            tests: runResult.tests,
+            markers: runResult.markers,
+            coverage: runResult.coverage,
           });
           message.error('有测试未通过');
         }
@@ -162,6 +187,15 @@ const LessonPage: React.FC = () => {
         });
       });
   }, [code, showSolution, currentLesson, isTDD, runCode, chapterKey, effectiveLessonKey]);
+
+  // 自动重跑（watch 体验替代）：代码停止输入 1.2s 后自动运行
+  const handleRunTestRef = useRef(handleRunTest);
+  handleRunTestRef.current = handleRunTest;
+  useEffect(() => {
+    if (!autoRun) return;
+    const t = window.setTimeout(() => handleRunTestRef.current(), 1200);
+    return () => window.clearTimeout(t);
+  }, [code, autoRun]);
 
   if (!chapter) {
     return (
@@ -351,9 +385,33 @@ const LessonPage: React.FC = () => {
                   result={result}
                   isReady={isReady}
                   fileName={editorFileName}
+                  errorMarkers={!isTDD ? result.markers : undefined}
                 />
 
                 {/* 操作区 */}
+                {/* 真实模块（只读）：vi.mock 等依赖的源文件，可切换查看 */}
+                {currentLesson?.extraFiles && Object.keys(currentLesson.extraFiles).length > 0 && (
+                  <Tabs
+                    defaultActiveKey={Object.keys(currentLesson.extraFiles)[0]}
+                    items={Object.entries(currentLesson.extraFiles).map(([name, content]) => ({
+                      key: name,
+                      label: name,
+                      children: (
+                        <CodeEditor
+                          value={content}
+                          fileName={name}
+                          language="typescript"
+                          readOnly
+                          onChange={() => {}}
+                          onRun={() => {}}
+                          result={{ status: 'idle', output: '' }}
+                          isReady={isReady}
+                        />
+                      ),
+                    }))}
+                  />
+                )}
+
                 <div className={styles.solutionToggle}>
                   <Space wrap>
                     <Button
@@ -367,6 +425,15 @@ const LessonPage: React.FC = () => {
                     <Button icon={<ReloadOutlined />} onClick={handleReset}>
                       重置代码
                     </Button>
+                    <Button icon={<DownloadOutlined />} onClick={handleExport}>
+                      导出代码
+                    </Button>
+                    <Switch
+                      checkedChildren="自动运行"
+                      unCheckedChildren="手动"
+                      checked={autoRun}
+                      onChange={setAutoRun}
+                    />
                   </Space>
                   <Text type="secondary" className={styles.solutionHint}>
                     （先自己尝试，再看答案效果更好）

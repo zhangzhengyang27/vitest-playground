@@ -108,6 +108,42 @@
   background: #e5e7eb;
 }
 
+/* ---- 搜索 / 筛选 ---- */
+.filterBar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.searchInput {
+  max-width: 420px;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filterTag {
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+
+.emptyHint {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 40px 0;
+}
+
 /* ---- 通用区块 ---- */
 .section {
   margin-bottom: 32px;

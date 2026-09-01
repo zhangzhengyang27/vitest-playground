@@ -11,12 +11,14 @@ import type { RunResult } from './types';
 export async function runVitest(
   specFiles: Record<string, string>,
   jsdom = false,
+  coverage = false,
+  benchmark = false,
 ): Promise<RunResult> {
   try {
     const resp = await fetch('/api/run-vitest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: specFiles, jsdom }),
+      body: JSON.stringify({ files: specFiles, jsdom, coverage, benchmark }),
     });
     if (!resp.ok) {
       return {
@@ -47,6 +49,7 @@ export async function runVitest(
  *   hiddenCode 为额外隐藏校验（lesson.hidden.spec.ts，不展示给用户，用于防作弊/强化验证）。
  * - jsdom：为 true 时向测试文件注入 `// @vitest-environment happy-dom`（React 组件测试）。
  * - onProgress：保留兼容字段（当前服务端一次性返回结果，不流式回调）。
+ * - coverage：为 true 时服务端开启 --coverage 并收集覆盖率摘要。
  */
 export interface RunOptions {
   userCode: string;
@@ -59,6 +62,10 @@ export interface RunOptions {
   onProgress?: (chunk: string) => void;
   /** 额外写入沙箱的文件（如 vi.mock 所需的真实模块），键为相对文件名，值为内容 */
   extraFiles?: Record<string, string>;
+  /** 是否收集覆盖率（服务端 --coverage） */
+  coverage?: boolean;
+  /** 是否以基准模式运行（vitest bench） */
+  benchmark?: boolean;
 }
 
 /**
@@ -94,7 +101,7 @@ export function useRealVitest() {
         files[name] = contents;
       }
     }
-    return runVitest(files, !!opts.jsdom);
+    return runVitest(files, !!opts.jsdom, !!opts.coverage, !!opts.benchmark);
   }, []);
 
   return { runCode, isReady };

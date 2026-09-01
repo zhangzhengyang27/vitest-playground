@@ -20,6 +20,8 @@ export interface Lesson {
   environment?: 'jsdom';
   /** 额外写入运行沙箱的文件（如 vi.mock 所需的真实模块），键为相对文件名，值为内容 */
   extraFiles?: Record<string, string>;
+  /** 以基准模式运行（vitest bench）：用户编写 bench() 而非 test() */
+  benchmark?: boolean;
 }
 
 export interface Chapter {
@@ -1863,6 +1865,229 @@ describe('Mock isolation', () => {
           'mock 也要在 beforeEach 中创建'
         ]
       }
+    ]
+  },
+
+  // ========== 第九章：覆盖率与高级技巧 ==========
+  {
+    key: 'coverage-advanced',
+    title: '第九章：覆盖率与高级技巧',
+    description: '掌握测试覆盖率、标签筛选、并发/重试、测试组织与 mock 进阶',
+    lessons: [
+      {
+        key: 'coverage-basics',
+        title: '9.1 测试覆盖率',
+        description: '运行测试后查看右下角「覆盖率（整体）」面板，了解哪些代码被测试覆盖。实现 isLeapYear 让所有断言通过。',
+        code: `// 运行后查看右下角「覆盖率（整体）」面板
+function isLeapYear(year: number): boolean {
+  // TODO: 实现闰年判断
+  // 规则：能被 4 整除但不能被 100 整除，或能被 400 整除
+  return false;
+}
+
+test('闰年判断', () => {
+  expect(isLeapYear(2000)).toBe(true);
+  expect(isLeapYear(1900)).toBe(false);
+  expect(isLeapYear(2024)).toBe(true);
+  expect(isLeapYear(2023)).toBe(false);
+});
+`,
+        solution: `function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+test('闰年判断', () => {
+  expect(isLeapYear(2000)).toBe(true);
+  expect(isLeapYear(1900)).toBe(false);
+  expect(isLeapYear(2024)).toBe(true);
+  expect(isLeapYear(2023)).toBe(false);
+});
+`,
+        tips: [
+          '覆盖率面板来自 Vitest 的 --coverage（@vitest/coverage-v8）',
+          '提高覆盖率能发现未被测试触达的分支',
+          '100% 覆盖率不等于没有 bug，但能减少回归风险'
+        ],
+      },
+      {
+        key: 'test-tags',
+        title: '9.2 测试标签与筛选',
+        description: '用 test.skip / test.only / test.todo 控制运行范围；命令行可用 --testNamePattern 按名称筛选。',
+        code: `test('正常用例', () => {
+  expect(1 + 1).toBe(2);
+});
+
+// 跳过该用例（不计入失败）
+test.skip('暂时跳过', () => {
+  expect(1).toBe(2);
+});
+
+// 标记待补，不运行但显示在报告中
+test.todo('补充边界情况测试');
+
+test.only('只运行我（其余被忽略）', () => {
+  expect('vitest'.length).toBe(6);
+});
+`,
+        tips: [
+          'test.only 会忽略同文件其他用例，调试时很有用，提交前记得去掉',
+          'test.skip 与 test.todo 都不会让套件失败',
+          '运行器当前默认全量运行；only 由测试代码控制'
+        ],
+      },
+      {
+        key: 'concurrent',
+        title: '9.3 并发测试',
+        description: 'test.concurrent 让用例并行执行，加速 IO/异步密集型测试。用例之间必须互相独立。',
+        code: `function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+test.concurrent('任务 A', async () => {
+  await delay(20);
+  expect(1 + 1).toBe(2);
+});
+
+test.concurrent('任务 B', async () => {
+  await delay(20);
+  expect('ab'.length).toBe(2);
+});
+
+test.concurrent('任务 C', async () => {
+  await delay(20);
+  expect([1, 2, 3]).toHaveLength(3);
+});
+`,
+        tips: [
+          '并发用例共享状态会互相干扰，务必保持独立',
+          '并发能显著缩短大量异步用例的总耗时',
+          '可在 describe 上用 test.concurrent 影响整组'
+        ],
+      },
+      {
+        key: 'retry-flaky',
+        title: '9.4 重试不稳定测试',
+        description: 'test(name, { retry: n }, fn) 在偶发失败时自动重试，适合对抗 flaky（不稳定）用例。',
+        code: `test('偶发失败，自动重试', { retry: 3 }, () => {
+  // 模拟一个约 50% 概率失败的不稳定断言
+  if (Math.random() > 0.5) {
+    throw new Error('网络抖动');
+  }
+  expect(true).toBe(true);
+});
+
+test('稳定用例', () => {
+  expect(Math.max(1, 2, 3)).toBe(3);
+});
+`,
+        tips: [
+          'retry 是权宜之计，根因仍是代码/环境不稳定，应优先修复',
+          '重试会重复执行用例，可能拖慢套件',
+          'Vitest 默认不重试，需在用例选项里显式开启'
+        ],
+      },
+      {
+        key: 'organization',
+        title: '9.5 测试组织与钩子',
+        description: '用嵌套 describe 与 beforeEach/afterEach 组织用例，让结构清晰、状态可控。',
+        code: `describe('购物车', () => {
+  let cart: string[];
+
+  beforeEach(() => {
+    cart = [];
+  });
+
+  afterEach(() => {
+    cart = [];
+  });
+
+  describe('添加商品', () => {
+    test('添加后长度为 1', () => {
+      cart.push('apple');
+      expect(cart).toHaveLength(1);
+    });
+
+    test('可添加多个', () => {
+      cart.push('apple', 'banana');
+      expect(cart).toHaveLength(2);
+    });
+  });
+
+  describe('清空', () => {
+    test('重置后为空', () => {
+      cart.push('apple');
+      cart = [];
+      expect(cart).toHaveLength(0);
+    });
+  });
+});
+`,
+        tips: [
+          'beforeEach 保证每个用例拿到干净状态',
+          '嵌套 describe 让报告层级清晰',
+          '钩子执行顺序：外层 beforeEach → 内层 beforeEach → 用例'
+        ],
+      },
+      {
+        key: 'mock-advanced',
+        title: '9.6 mock 进阶：依次返回与时间控制',
+        description: 'mockImplementationOnce 让 mock 每次调用返回不同值；useFakeTimers/useRealTimers 控制时间流逝。',
+        code: `import { vi } from 'vitest';
+
+test('依次返回不同值', () => {
+  const fn = vi.fn();
+  fn.mockImplementationOnce(() => 1)
+    .mockImplementationOnce(() => 2)
+    .mockImplementationOnce(() => 3);
+
+  expect(fn()).toBe(1);
+  expect(fn()).toBe(2);
+  expect(fn()).toBe(3);
+});
+
+test('控制时间流逝', () => {
+  vi.useFakeTimers();
+  const start = Date.now();
+  vi.advanceTimersByTime(1500);
+  expect(Date.now() - start).toBe(1500);
+  vi.useRealTimers(); // 用完恢复真实时间
+});
+`,
+        tips: [
+          'mockImplementationOnce 用尽后回落到默认实现',
+          'useFakeTimers 后定时器不会真的等待，用 advanceTimersByTime 推进',
+          '务必在测试结束恢复真实时间（useRealTimers 或 afterEach）'
+        ],
+      },
+      {
+        key: 'benchmark',
+        title: '9.7 性能基准测试',
+        description: '用 bench() 测量函数耗时。开启基准模式后，vitest 以基准方式运行并报告均值与吞吐量。',
+        benchmark: true,
+        code: `import { bench, describe } from 'vitest';
+
+function sum(n: number) {
+  let s = 0;
+  for (let i = 0; i < n; i++) s += i;
+  return s;
+}
+
+describe('sum 性能', () => {
+  bench('累加 1000', () => {
+    sum(1000);
+  });
+
+  bench('累加 100000', () => {
+    sum(100000);
+  });
+});
+`,
+        tips: [
+          'bench 用于度量性能，不同于 test 的正确性断言',
+          '报告中的 mean 是平均耗时（ms），hz 是每秒操作数',
+          '基准结果会受机器负载影响，只作相对比较'
+        ],
+      },
     ]
   },
 
@@ -4363,5 +4588,125 @@ describe('Mirror 隐藏校验', () => {
         ],
       },
     ],
+  },
+
+  // ========== 第十六章：TDD 进阶实战 ==========
+  {
+    key: 'tdd-advanced',
+    title: '第十六章：TDD 进阶实战',
+    description: '更多经典 TDD kata：罗马数字、有效括号。测试已给出，请实现让它们通过。',
+    lessons: [
+      {
+        key: 'roman',
+        title: '16.1 TDD：罗马数字',
+        description: '实现 toRoman(n)，把阿拉伯数字（1-3999）转成罗马数字。测试已给出，请实现让它们通过。',
+        code: `export function toRoman(n: number): string {
+  // TODO: 实现阿拉伯数字 -> 罗马数字
+  return '';
+}
+`,
+        grader: `import { toRoman } from './lesson';
+
+describe('toRoman', () => {
+  test('基本符号', () => {
+    expect(toRoman(1)).toBe('I');
+    expect(toRoman(5)).toBe('V');
+    expect(toRoman(10)).toBe('X');
+    expect(toRoman(50)).toBe('L');
+    expect(toRoman(100)).toBe('C');
+    expect(toRoman(500)).toBe('D');
+    expect(toRoman(1000)).toBe('M');
+  });
+
+  test('组合与减法', () => {
+    expect(toRoman(4)).toBe('IV');
+    expect(toRoman(9)).toBe('IX');
+    expect(toRoman(40)).toBe('XL');
+    expect(toRoman(90)).toBe('XC');
+    expect(toRoman(400)).toBe('CD');
+    expect(toRoman(900)).toBe('CM');
+  });
+
+  test('综合', () => {
+    expect(toRoman(1994)).toBe('MCMXCIV');
+    expect(toRoman(2024)).toBe('MMXXIV');
+    expect(toRoman(3999)).toBe('MMMCMXCIX');
+  });
+});
+`,
+        hiddenGrader: `import { toRoman } from './lesson';
+
+describe('toRoman 隐藏校验', () => {
+  test('更多边界', () => {
+    expect(toRoman(3)).toBe('III');
+    expect(toRoman(58)).toBe('LVIII');
+    expect(toRoman(944)).toBe('CMXLIV');
+    expect(toRoman(16)).toBe('XVI');
+  });
+
+  test('不能靠常量蒙混', () => {
+    expect(toRoman(1)).not.toBe('');
+    expect(toRoman(2)).toBe('II');
+    expect(toRoman(6)).toBe('VI');
+  });
+});
+`,
+        tips: [
+          '用「值-符号」映射表（从大到小）配合贪心取法',
+          '减法组合出现在 4/9/40/90/400/900',
+          '循环减去能容纳的最大符号，直到 n 为 0'
+        ],
+      },
+      {
+        key: 'valid-parens',
+        title: '16.2 TDD：有效括号',
+        description: '实现 isValid(s)，判断括号串是否合法（(), [], {} 三种，且正确嵌套）。测试已给出。',
+        code: `export function isValid(s: string): boolean {
+  // TODO: 用栈判断括号是否匹配
+  return false;
+}
+`,
+        grader: `import { isValid } from './lesson';
+
+describe('isValid', () => {
+  test('有效', () => {
+    expect(isValid('()')).toBe(true);
+    expect(isValid('()[]{}')).toBe(true);
+    expect(isValid('([])')).toBe(true);
+    expect(isValid('{[]}')).toBe(true);
+  });
+
+  test('无效', () => {
+    expect(isValid('(')).toBe(false);
+    expect(isValid(')(')).toBe(false);
+    expect(isValid('([)]')).toBe(false);
+    expect(isValid('{')).toBe(false);
+  });
+});
+`,
+        hiddenGrader: `import { isValid } from './lesson';
+
+describe('isValid 隐藏校验', () => {
+  test('更多边界', () => {
+    expect(isValid('')).toBe(true);
+    expect(isValid('((()))')).toBe(true);
+    expect(isValid('(]')).toBe(false);
+    expect(isValid('([{}])')).toBe(true);
+    expect(isValid('(((')).toBe(false);
+  });
+
+  test('不能靠长度奇偶蒙混', () => {
+    expect(isValid('()()')).toBe(true);
+    expect(isValid('))((')).toBe(false);
+  });
+});
+`,
+        tips: [
+          '用栈：遇到左括号入栈，遇到右括号与栈顶匹配',
+          '匹配不上或结束后栈非空都算无效',
+          '空串视为有效'
+        ],
+      },
+    ]
   },
 ];

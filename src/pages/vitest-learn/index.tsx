@@ -1,8 +1,8 @@
 /**
  * Vitest 学习平台 - 课程中心（主页）
- * 展示学习路径：Hero 区 + 章节卡片网格 + 学习特色。
+ * 展示学习路径：Hero 区 + 搜索/标签筛选 + 章节卡片网格 + 学习特色。
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   BookOutlined,
   ExperimentOutlined,
@@ -11,8 +11,9 @@ import {
   ReadOutlined,
   FireOutlined,
   CheckCircleOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
-import { Button, Progress, Tag } from 'antd';
+import { Button, Progress, Tag, Input } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { chapters } from './data';
@@ -26,6 +27,20 @@ const CHAPTER_STYLES = [
   { icon: <ReadOutlined />, gradient: 'linear-gradient(135deg,#d97706,#f43f5e)' },
   { icon: <FireOutlined />, gradient: 'linear-gradient(135deg,#7c3aed,#db2777)' },
 ];
+
+const FILTER_TAGS = ['全部', 'React', '异步', 'Mock', '快照', '覆盖率', '测试替身', 'TDD'];
+
+const TAG_MAP: Record<string, string[]> = {
+  'react-testing': ['React'],
+  async: ['异步'],
+  timers: ['异步'],
+  mock: ['Mock'],
+  'test-doubles': ['Mock', '测试替身'],
+  'tdd-practice': ['TDD'],
+  'tdd-advanced': ['TDD'],
+  snapshot: ['快照'],
+  'coverage-advanced': ['覆盖率'],
+};
 
 const FEATURES = [
   {
@@ -47,6 +62,8 @@ const FEATURES = [
 
 const Welcome: React.FC = () => {
   const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [activeTag, setActiveTag] = useState('全部');
 
   const stats = useMemo(() => {
     const totalLessons = chapters.reduce((s, c) => s + c.lessons.length, 0);
@@ -60,6 +77,19 @@ const Welcome: React.FC = () => {
   const percent = stats.totalLessons
     ? Math.round((stats.passed / stats.totalLessons) * 100)
     : 0;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return chapters.filter((c) => {
+      const matchTag = activeTag === '全部' || (TAG_MAP[c.key] ?? []).includes(activeTag);
+      const matchQuery =
+        !q ||
+        c.title.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q) ||
+        c.lessons.some((l) => l.title.toLowerCase().includes(q));
+      return matchTag && matchQuery;
+    });
+  }, [query, activeTag]);
 
   return (
     <AppLayout>
@@ -114,70 +144,94 @@ const Welcome: React.FC = () => {
         </div>
       </section>
 
-      {/* ===== 章节网格 ===== */}
+      {/* ===== 课程大纲 + 搜索/筛选 ===== */}
       <section id="chapters" className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>课程大纲</h2>
           <span className={styles.sectionHint}>选择章节开始你的学习之旅</span>
         </div>
 
-        <div className={styles.chapterGrid}>
-          {chapters.map((chapter, ci) => {
-            const chapterPassed = chapter.lessons.filter((l) =>
-              isLessonPassed(chapter.key, l.key),
-            ).length;
-            const chapterPercent = chapter.lessons.length
-              ? Math.round((chapterPassed / chapter.lessons.length) * 100)
-              : 0;
-            const style = CHAPTER_STYLES[ci % CHAPTER_STYLES.length];
-
-            return (
-              <div
-                key={chapter.key}
-                className={styles.chapterCard}
-                onClick={() => navigate(`/vitest-learn/${chapter.key}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && navigate(`/vitest-learn/${chapter.key}`)}
+        <div className={styles.filterBar}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="搜索章节或课时关键词"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={styles.searchInput}
+          />
+          <div className={styles.tagRow}>
+            {FILTER_TAGS.map((t) => (
+              <Tag.CheckableTag
+                key={t}
+                checked={activeTag === t}
+                onChange={() => setActiveTag(t)}
+                className={styles.filterTag}
               >
-                <div className={styles.chapterCardTop}>
-                  <span
-                    className={styles.chapterIcon}
-                    style={{ background: style.gradient }}
-                  >
-                    {style.icon}
-                  </span>
-                  <div className={styles.chapterCardInfo}>
-                    <h3 className={styles.chapterTitle}>{chapter.title}</h3>
-                    <p className={styles.chapterDesc}>{chapter.description}</p>
+                {t}
+              </Tag.CheckableTag>
+            ))}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className={styles.emptyHint}>没有匹配「{query || activeTag}」的章节，换个关键词试试。</p>
+        ) : (
+          <div className={styles.chapterGrid}>
+            {filtered.map((chapter, ci) => {
+              const chapterPassed = chapter.lessons.filter((l) =>
+                isLessonPassed(chapter.key, l.key),
+              ).length;
+              const chapterPercent = chapter.lessons.length
+                ? Math.round((chapterPassed / chapter.lessons.length) * 100)
+                : 0;
+              const style = CHAPTER_STYLES[ci % CHAPTER_STYLES.length];
+
+              return (
+                <div
+                  key={chapter.key}
+                  className={styles.chapterCard}
+                  onClick={() => navigate(`/vitest-learn/${chapter.key}`)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/vitest-learn/${chapter.key}`)}
+                >
+                  <div className={styles.chapterCardTop}>
+                    <span className={styles.chapterIcon} style={{ background: style.gradient }}>
+                      {style.icon}
+                    </span>
+                    <div className={styles.chapterCardInfo}>
+                      <h3 className={styles.chapterTitle}>{chapter.title}</h3>
+                      <p className={styles.chapterDesc}>{chapter.description}</p>
+                    </div>
+                  </div>
+
+                  <div className={styles.chapterCardMeta}>
+                    <Tag className={styles.chapterLessonsTag}>
+                      <BookOutlined /> {chapter.lessons.length} 个课时
+                    </Tag>
+                    {chapterPassed > 0 && (
+                      <Tag color="success" className={styles.chapterPassedTag}>
+                        <CheckCircleOutlined /> 已通关 {chapterPassed}
+                      </Tag>
+                    )}
+                  </div>
+
+                  <div className={styles.chapterProgressRow}>
+                    <Progress
+                      percent={chapterPercent}
+                      size="small"
+                      strokeColor="#2563eb"
+                      showInfo={false}
+                      className={styles.chapterProgress}
+                    />
+                    <span className={styles.chapterProgressText}>{chapterPercent}%</span>
                   </div>
                 </div>
-
-                <div className={styles.chapterCardMeta}>
-                  <Tag className={styles.chapterLessonsTag}>
-                    <BookOutlined /> {chapter.lessons.length} 个课时
-                  </Tag>
-                  {chapterPassed > 0 && (
-                    <Tag color="success" className={styles.chapterPassedTag}>
-                      <CheckCircleOutlined /> 已通关 {chapterPassed}
-                    </Tag>
-                  )}
-                </div>
-
-                <div className={styles.chapterProgressRow}>
-                  <Progress
-                    percent={chapterPercent}
-                    size="small"
-                    strokeColor="#2563eb"
-                    showInfo={false}
-                    className={styles.chapterProgress}
-                  />
-                  <span className={styles.chapterProgressText}>{chapterPercent}%</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {stats.totalLessons > 0 && (
           <div className={styles.totalProgress}>
@@ -187,10 +241,7 @@ const Welcome: React.FC = () => {
                 已完成 {stats.passed}/{stats.totalLessons} 课时
               </span>
             </div>
-            <Progress
-              percent={percent}
-              strokeColor={{ '0%': '#2563eb', '100%': '#7c3aed' }}
-            />
+            <Progress percent={percent} strokeColor={{ '0%': '#2563eb', '100%': '#7c3aed' }} />
           </div>
         )}
       </section>

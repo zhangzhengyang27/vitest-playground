@@ -12,10 +12,11 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { RunResult } from './src/pages/vitest-learn/types';
+import type { RunResult, CoverageSummary, CoverageFile } from './src/pages/vitest-learn/types';
 
 const ROOT = process.cwd();
 const SANDBOX = path.join(ROOT, '.vitest-sandbox');
+const COVERAGE_DIR = path.join(SANDBOX, 'coverage');
 const VITEST_BIN = path.join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
 /** 单次执行超时（毫秒） */
 const RUN_TIMEOUT = 60_000;
@@ -23,6 +24,10 @@ const RUN_TIMEOUT = 60_000;
 interface RunBody {
   files: Record<string, string>;
   jsdom: boolean;
+  /** 是否开启覆盖率收集（--coverage，reporter 见 vitest.config.js） */
+  coverage?: boolean;
+  /** 是否以基准模式运行（vitest bench） */
+  benchmark?: boolean;
 }
 
 /** 上一轮写入的临时文件，便于每轮清理，避免跨模式/跨课时残留互相干扰 */
@@ -36,11 +41,12 @@ const LESSON_FILE_CANDIDATES = [
   'result.json',
 ];
 
-function ensureSandbox() {
+function ensureSandbox(coverage: boolean) {
   fs.mkdirSync(SANDBOX, { recursive: true });
   // vitest 配置：globals / 自动 jsx；环境默认 node，jsdom 章节由文件内 pragma 覆盖。
   // 注意：不用 reporter 的 tuple 形式（[['json',{outputFile}]] 在部分环境会被当成
   // 自定义模块解析而崩溃），改用 CLI `--reporter=json` 并解析 stdout。
+  // coverage.reporter 设为 json-summary 备用；CLI 传 --coverage 时启用。
   fs.writeFileSync(
     path.join(SANDBOX, 'vitest.config.js'),
     `export default {
@@ -51,6 +57,7 @@ function ensureSandbox() {
     include: ['*.spec.ts', '*.spec.tsx', '*.test.ts', '*.test.tsx'],
   },
   esbuild: { jsx: 'automatic' },
+  coverage: { reporter: ['json-summary'], ${coverage ? 'enabled: true' : 'enabled: false'} },
 };
 `,
   );
@@ -71,7 +78,33 @@ function cleanupLessonFiles() {
   }
 }
 
-function parseVitestJson(raw: string, exitCode: number): RunResult {
+/** 读取覆盖率摘要（vitest --coverage 写出的 coverage-summary.json） */
+function readCoverage(): CoverageSummary | undefined {
+  try {
+    const summaryPath = path.join(COVERAGE_DIR, 'coverage-summary.json');
+    if (!fs.existsSync(summaryPath)) return undefined;
+    const raw = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')) as Record<string, any>;
+    const toFile = (obj: any): CoverageFile => ({
+      lines: Number(obj?.lines?.pct ?? 0),
+      statements: Number(obj?.statements?.pct ?? 0),
+      branches: Number(obj?.branches?.pct ?? 0),
+      functions: Number(obj?.functions?.pct ?? 0),
+    });
+    const total = toFile(raw.total);
+    const files: CoverageFile[] = Object.entries(raw)
+      .filter(([k]) => k !== 'total')
+      .map(([k, v]) => ({ file: path.basename(k), ...toFile(v) }));
+    return { total, files };
+  } catch {
+    return undefined;
+  }
+}
+
+function parseVitestJson(
+  raw: string,
+  exitCode: number,
+  coverage?: CoverageSummary,
+): RunResult {
   try {
     const data = JSON.parse(raw);
     const passed: number = data.numPassedTests ?? 0;
@@ -79,12 +112,32 @@ function parseVitestJson(raw: string, exitCode: number): RunResult {
     const pending: number = data.numPendingTests ?? 0;
     const success = failed === 0;
 
+    const tests: RunResult['tests'] = [];
+    const markers: RunResult['markers'] = [];
+
     const lines: string[] = ['Test Results', '============', ''];
     for (const fileResult of data.testResults ?? []) {
-      lines.push(`📄 ${fileResult.name ?? ''}`);
+      const fileName = fileResult.name ? path.basename(fileResult.name) : '';
+      lines.push(`📄 ${fileName}`);
       for (const t of fileResult.assertionResults ?? []) {
-        const icon = t.status === 'passed' ? '✓' : t.status === 'failed' ? '✗' : '○';
-        lines.push(`  ${icon} ${t.title ?? ''}`);
+        const icon =
+          t.status === 'passed'
+            ? '✓'
+            : t.status === 'failed'
+              ? '✗'
+              : t.status === 'skipped' || t.status === 'pending'
+                ? '○'
+                : '·';
+        const dur =
+          typeof t.duration === 'number' ? ` (${Math.round(t.duration)}ms)` : '';
+        lines.push(`  ${icon} ${t.title ?? ''}${dur}`);
+        tests.push({
+          name: t.title ?? '',
+          status: t.status,
+          duration: typeof t.duration === 'number' ? t.duration : undefined,
+          file: fileName,
+          line: t.location?.line,
+        });
         if (t.status === 'failed' && Array.isArray(t.failureMessages) && t.failureMessages.length) {
           const msg = t.failureMessages[0]
             .split('\n')
@@ -92,6 +145,10 @@ function parseVitestJson(raw: string, exitCode: number): RunResult {
             .map((l: string) => `    ${l}`)
             .join('\n');
           lines.push(msg);
+          markers.push({
+            line: t.location?.line ?? 1,
+            message: (t.failureMessages[0].split('\n')[0] ?? '测试失败').slice(0, 200),
+          });
         }
       }
       lines.push('');
@@ -100,11 +157,46 @@ function parseVitestJson(raw: string, exitCode: number): RunResult {
     if (exitCode !== 0 && failed === 0) {
       lines.push('（进程退出码非 0，可能存在配置/环境问题）');
     }
-    return { success, output: lines.join('\n'), passed, failed, pending };
+    return { success, output: lines.join('\n'), passed, failed, pending, tests, markers, coverage };
   } catch {
     return {
       success: false,
       output: `测试结果解析失败，原始输出:\n${raw.slice(0, 2000)}`,
+      passed: 0,
+      failed: 1,
+    };
+  }
+}
+
+/** 解析 vitest bench --reporter=json 的输出 */
+function parseBenchJson(raw: string): RunResult {
+  try {
+    const data = JSON.parse(raw);
+    const lines: string[] = ['Benchmark Results', '================', ''];
+    const tests: RunResult['tests'] = [];
+    for (const file of data.files ?? []) {
+      lines.push(`📄 ${file.filepath ?? ''}`);
+      for (const g of file.groups ?? []) {
+        for (const b of g.benchmarks ?? []) {
+          const mean = typeof b.mean === 'number' ? b.mean : 0;
+          const hz = typeof b.hz === 'number' ? b.hz : 0;
+          lines.push(`  • ${b.name}: ${mean.toFixed(3)}ms (${Math.round(hz)} ops/s)`);
+          tests.push({ name: b.name, status: 'passed', duration: mean });
+        }
+      }
+      lines.push('');
+    }
+    return {
+      success: true,
+      output: lines.join('\n'),
+      passed: tests.length,
+      failed: 0,
+      tests,
+    };
+  } catch {
+    return {
+      success: false,
+      output: `基准结果解析失败，原始输出:\n${raw.slice(0, 2000)}`,
       passed: 0,
       failed: 1,
     };
@@ -131,16 +223,25 @@ function readBody(req: IncomingMessage): Promise<RunBody> {
 
 /**
  * 在沙箱目录跑一次真实 vitest，返回结构化结果。
+ * benchmark 为 true 时改用 `vitest bench` 子命令。
  */
-function runInSandbox(files: Record<string, string>): Promise<RunResult> {
-  ensureSandbox();
+function runInSandbox(
+  files: Record<string, string>,
+  coverage: boolean,
+  benchmark: boolean,
+): Promise<RunResult> {
+  ensureSandbox(coverage);
   cleanupLessonFiles();
   for (const [name, contents] of Object.entries(files)) {
     fs.writeFileSync(path.join(SANDBOX, name), contents);
   }
 
   return new Promise<RunResult>((resolve) => {
-    const child = spawn('node', [VITEST_BIN, 'run', '--root', SANDBOX, '--reporter=json'], {
+    const args = benchmark
+      ? ['bench', '--root', SANDBOX, '--reporter=json']
+      : ['run', '--root', SANDBOX, '--reporter=json'];
+    if (coverage && !benchmark) args.push('--coverage');
+    const child = spawn('node', [VITEST_BIN, ...args], {
       cwd: SANDBOX,
       env: { ...process.env, NODE_ENV: 'test' },
     });
@@ -162,16 +263,31 @@ function runInSandbox(files: Record<string, string>): Promise<RunResult> {
     child.on('exit', (code) => {
       clearTimeout(timer);
       const raw = extractJson(out);
+      if (benchmark) {
+        if (!raw) {
+          resolve({
+            success: false,
+            output: `无法从输出解析基准结果，Vitest 输出:\n${out.slice(-2000)}`,
+            passed: 0,
+            failed: 1,
+          });
+          return;
+        }
+        resolve(parseBenchJson(raw));
+        return;
+      }
+      const coverageData = coverage ? readCoverage() : undefined;
       if (!raw) {
         resolve({
           success: false,
           output: `无法从输出解析测试结果，Vitest 输出:\n${out.slice(-2000)}`,
           passed: 0,
           failed: 1,
+          coverage: coverageData,
         });
         return;
       }
-      resolve(parseVitestJson(raw, code ?? 0));
+      resolve(parseVitestJson(raw, code ?? 0, coverageData));
     });
 
     child.on('error', (err) => {
@@ -211,7 +327,7 @@ export async function handleRunVitest(
       res.end(JSON.stringify({ success: false, output: '缺少 files 字段', passed: 0, failed: 1 }));
       return;
     }
-    const result = await runInSandbox(body.files);
+    const result = await runInSandbox(body.files, !!body.coverage, !!body.benchmark);
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(result));
   } catch (e) {

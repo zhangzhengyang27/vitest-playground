@@ -45,7 +45,14 @@
 - [8.2 自定义匹配器](./src/pages/vitest-learn/advanced)
 - [8.3 测试配置和隔离](./src/pages/vitest-learn/advanced)
 
-> 注：课程数据中暂无第九章，章节编号从第八章直接跳到第十章。
+### 第九章：覆盖率与高级技巧
+- [9.1 测试覆盖率](./src/pages/vitest-learn/coverage-advanced)
+- [9.2 测试标签与筛选](./src/pages/vitest-learn/coverage-advanced)
+- [9.3 并发测试](./src/pages/vitest-learn/coverage-advanced)
+- [9.4 重试不稳定测试](./src/pages/vitest-learn/coverage-advanced)
+- [9.5 测试组织与钩子](./src/pages/vitest-learn/coverage-advanced)
+- [9.6 mock 进阶：依次返回与时间控制](./src/pages/vitest-learn/coverage-advanced)
+- [9.7 性能基准测试](./src/pages/vitest-learn/coverage-advanced)
 
 ### 第十章：测试替身
 - [10.1 Dummy（虚设对象）](./src/pages/vitest-learn/test-doubles)
@@ -81,6 +88,10 @@
 - [15.2 状态与事件](./src/pages/vitest-learn/react-testing)
 - [15.3 受控输入](./src/pages/vitest-learn/react-testing)
 
+### 第十六章：TDD 进阶实战
+- [16.1 TDD：罗马数字](./src/pages/vitest-learn/tdd-advanced)
+- [16.2 TDD：有效括号](./src/pages/vitest-learn/tdd-advanced)
+
 ## 运行项目
 
 ```bash
@@ -96,23 +107,35 @@ npm run dev
 - antd v6（仅作为 UI 组件库，已移除 Ant Design Pro 框架层）
 - react-router-dom v7（路由）
 - Monaco Editor（代码编辑器，本地打包，含行号/补全/暗色主题）
-- @webcontainer/api（在浏览器内启动真实 Node 环境运行 Vitest）
 - Vitest 4 + @testing-library/react（测试）
 - highlight.js（文档代码高亮）
+- `@vitest/coverage-v8`（覆盖率）
+- 服务端运行器（见 `vitestServerRunner.ts`）：在本机沙箱目录用「项目已安装的 vitest」真实运行用户代码
 
-## 新增能力
+> 说明：早期版本曾用 `@webcontainer/api` 在浏览器内启动 Node 运行测试，现已改为由本地 Vite 服务器中间件 `/api/run-vitest` 调用本机真实 Vitest，离线即可运行（前提 `node_modules` 已安装）。
 
-- **真代码编辑器**：Monaco 替代原 textarea，支持行号、语法高亮、自动补全、括号匹配、`Ctrl/Cmd+Enter` 运行。
-- **真实 Vitest 运行**：通过 WebContainer 在浏览器内启动真实 Node 环境安装并运行 Vitest（多文件、`vi.mock`、快照等行为与本地一致）。首次运行需联网安装依赖。
+## 核心能力
+
+- **真实 Vitest 运行**：浏览器把代码 POST 到本地 Vite 中间件的 `/api/run-vitest`，由服务端在沙箱目录用真实 Vitest 运行（多文件、`vi.mock`、快照、覆盖率等行为与本地一致），结果结构化返回。
+- **真代码编辑器**：Monaco 替代原 textarea，支持行号、语法高亮、自动补全、括号匹配、`Ctrl/Cmd+Enter` 运行，并支持**明暗主题切换**。
+- **覆盖率可视化**：开启 `--coverage` 后，结果面板展示整体与分文件的行/分支/函数覆盖率。
+- **失败行内定位**：测试失败时，编辑器会在对应行显示红色波浪线（Monaco markers）并附错误信息。
+- **逐用例耗时**：结果列表展示每个用例的运行耗时（ms）。
 - **进度持久化**：学习进度（代码、是否已通过）存入 `localStorage`，刷新不丢，课时列表与进度标签显示 ✓。
 - **知识小测**：章节可穿插选择题卡片（`Lesson.quiz`），动手前巩固概念。
-- **TDD 自动批改**：课时可设 `Lesson.grader`（可见测试用例，只读展示给用户并作为主校验）与 `Lesson.hiddenGrader`（额外隐藏校验，防作弊/强化验证）。设置 `grader` 后该课时进入 TDD 模式：用户只写实现，编辑器上方展示给定测试。新增「第十四章：TDD 实战演练」即采用此模式。
+- **TDD 自动批改**：课时可设 `Lesson.grader`（可见测试用例，只读展示给用户并作为主校验）与 `Lesson.hiddenGrader`（额外隐藏校验，防作弊/强化验证）。设置 `grader` 后该课时进入 TDD 模式：用户只写实现，编辑器上方展示给定测试。
+- **多文件预览**：`vi.mock` 等依赖的源文件（`Lesson.extraFiles`）以只读 tab 展示，便于查看被测模块。
+- **自动重跑**：课时页可开启「自动运行」开关，停止输入 1.2s 后自动重跑（watch 体验的轻量替代）。
+- **性能基准**：`Lesson.benchmark` 课时以 `vitest bench` 模式运行并报告均值与吞吐量。
+- **课程搜索与标签筛选**：首页支持关键词搜索与按主题（React/异步/Mock/快照/覆盖率/TDD…）筛选章节。
+- **全局进度总览**：`/progress` 页面展示整体/分章进度、成就徽章，并支持重置与导出进度。
+- **代码导出**：课时页可将当前代码导出为文件。
 
 ## 运行注意
 
-WebContainer 需要页面处于跨域隔离状态，开发/预览服务器已在 `vite.config.ts` 设置了
-`Cross-Origin-Embedder-Policy: require-corp` 与 `Cross-Origin-Opener-Policy: same-origin`。
-因此首次运行测试需联网（拉取 npm 依赖）。
+- 页面仍设置了跨域隔离头（`Cross-Origin-Embedder-Policy: require-corp` 与 `Cross-Origin-Opener-Policy: same-origin`），主要用于 Monaco Worker 同源加载与一致性，并非运行 Vitest 所必需。
+- 首次运行测试时，若本机 `node_modules` 未安装 `vitest` 等依赖，请先执行 `npm install`；依赖就绪后即可离线运行。
+- 运行器会在本机执行用户代码，仅适用于本地学习工具。
 
 > 说明：本项目已从 Ant Design Pro（Umi Max）模板剥离，仅保留 antd 组件库。
-> 测试执行引擎为 WebContainer 内的真实 Vitest（见 `src/pages/vitest-learn/runner.ts`）。
+> 测试执行引擎为本地服务端内的真实 Vitest（见 `src/pages/vitest-learn/runner.ts` 与 `vitestServerRunner.ts`）。

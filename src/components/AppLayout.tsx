@@ -4,16 +4,24 @@
  */
 import { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Progress, Tag } from 'antd';
-import { ThunderboltOutlined, HomeOutlined, ReadOutlined } from '@ant-design/icons';
+import { Progress, Tag, Button } from 'antd';
+import {
+  ThunderboltOutlined,
+  HomeOutlined,
+  ReadOutlined,
+  BarChartOutlined,
+  BulbOutlined,
+} from '@ant-design/icons';
 import { chapters } from '../pages/vitest-learn/data';
 import { isLessonPassed } from '../pages/vitest-learn/progress';
+import { useTheme } from '../theme';
 import styles from './appLayout.module.css';
 
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const inChapter = location.pathname.startsWith('/vitest-learn/');
+  const { theme, toggle } = useTheme();
 
   const total = useMemo(
     () => chapters.reduce((sum, c) => sum + c.lessons.length, 0),
@@ -48,10 +56,20 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
           <nav className={styles.nav}>
             <span
-              className={`${styles.navItem} ${!inChapter ? styles.navItemActive : ''}`}
+              className={`${styles.navItem} ${
+                !inChapter && location.pathname !== '/progress' ? styles.navItemActive : ''
+              }`}
               onClick={() => navigate('/')}
             >
               <HomeOutlined /> 课程中心
+            </span>
+            <span
+              className={`${styles.navItem} ${
+                location.pathname === '/progress' ? styles.navItemActive : ''
+              }`}
+              onClick={() => navigate('/progress')}
+            >
+              <BarChartOutlined /> 学习进度
             </span>
             {inChapter && (
               <span className={`${styles.navItem} ${styles.navItemActive}`}>
@@ -61,9 +79,13 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </nav>
 
           <div className={styles.topbarRight}>
-            <Tag className={styles.progressTag}>
-              已完成 {passed}/{total} 课时
-            </Tag>
+            <Button
+              type="text"
+              icon={<BulbOutlined />}
+              onClick={toggle}
+              title={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
+            />
+            <Tag className={styles.progressTag}>已完成 {passed}/{total} 课时</Tag>
             <Progress
               percent={percent}
               size="small"
