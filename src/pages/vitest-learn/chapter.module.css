@@ -345,28 +345,6 @@
   font-size: 12px;
 }
 
-/* 「复制运行」tab */
-.copyRun {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.copyRunHint {
-  margin-bottom: 0;
-}
-
-.copyRunEmpty {
-  text-align: center;
-  color: #94a3b8;
-  padding: 24px 0;
-}
-
-.copyFile {
-  display: flex;
-  flex-direction: column;
-}
-
 /* 导航按钮 */
 .navigation {
   display: flex;

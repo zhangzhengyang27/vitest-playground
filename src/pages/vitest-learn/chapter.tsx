@@ -2,7 +2,7 @@
  * Vitest 学习平台 - 章节学习工作台
  * 布局：面包屑 + 章节总览 + 左侧课时导航（sticky）+ 右侧学习内容（信息分区）。
  */
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Button,
@@ -26,7 +26,6 @@ import {
   ExperimentOutlined,
   TrophyOutlined,
   DownloadOutlined,
-  CopyOutlined,
 } from '@ant-design/icons';
 import { chapters } from './data';
 import { useRealVitest, type RunOptions } from './runner';
@@ -67,7 +66,6 @@ const LessonPage: React.FC = () => {
   const [result, setResult] = useState<TestResult>({ status: 'idle', output: '' });
   const [showSolution, setShowSolution] = useState(false);
   const [autoRun, setAutoRun] = useState(false);
-  const [viewMode, setViewMode] = useState<'edit' | 'copy'>('edit');
 
   // 章节整体进度
   const chapterPassedCount = chapter
@@ -116,40 +114,6 @@ const LessonPage: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   }, [code, showSolution, currentLesson, editorFileName]);
-
-  // 「复制运行」tab 展示的本课时全部相关文件（含可见/隐藏测试与真实模块）
-  const copyFiles = useMemo(() => {
-    const list: { name: string; content: string }[] = [];
-    if (currentLesson?.grader) {
-      list.push({ name: graderFileName, content: currentLesson.grader });
-    }
-    const userContent =
-      showSolution && currentLesson?.solution ? currentLesson.solution : code;
-    list.push({ name: editorFileName, content: userContent });
-    if (currentLesson?.hiddenGrader) {
-      list.push({
-        name: isJsdom ? 'lesson.hidden.spec.tsx' : 'lesson.hidden.spec.ts',
-        content: currentLesson.hiddenGrader,
-      });
-    }
-    if (currentLesson?.extraFiles) {
-      for (const [n, c] of Object.entries(currentLesson.extraFiles)) {
-        list.push({ name: n, content: c });
-      }
-    }
-    return list;
-  }, [currentLesson, code, showSolution, editorFileName, graderFileName, isJsdom]);
-
-  const copyToClipboard = useCallback((text: string, name: string) => {
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard
-        .writeText(text)
-        .then(() => message.success(`已复制 ${name}`))
-        .catch(() => message.error('复制失败，请手动选择'));
-    } else {
-      message.error('当前浏览器不支持剪贴板 API');
-    }
-  }, []);
 
   const handleRunTest = useCallback(() => {
     if (!chapterKey || !effectiveLessonKey || !currentLesson) return;
@@ -399,145 +363,82 @@ const LessonPage: React.FC = () => {
                   </div>
                 </div>
 
-                <Tabs
-                  activeKey={viewMode}
-                  onChange={(k) => setViewMode(k as 'edit' | 'copy')}
-                  items={[
-                    {
-                      key: 'edit',
-                      label: '编辑运行',
-                      children: (
-                        <>
-                          {/* TDD 模式：展示可见测试（只读） */}
-                          {isTDD && currentLesson.grader && (
-                            <CodeEditor
-                              value={currentLesson.grader}
-                              fileName={graderFileName}
-                              language="typescript"
-                              readOnly
-                              onChange={() => {}}
-                              onRun={() => {}}
-                              result={{ status: 'idle', output: '' }}
-                              isReady={isReady}
-                            />
-                          )}
+                {/* TDD 模式：展示可见测试（只读） */}
+                {isTDD && currentLesson.grader && (
+                  <CodeEditor
+                    value={currentLesson.grader}
+                    fileName={graderFileName}
+                    language="typescript"
+                    readOnly
+                    onChange={() => {}}
+                    onRun={() => {}}
+                    result={{ status: 'idle', output: '' }}
+                    isReady={isReady}
+                  />
+                )}
 
-                          {/* 代码编辑器 */}
-                          <CodeEditor
-                            value={showSolution && currentLesson?.solution ? currentLesson.solution : code}
-                            onChange={handleCodeChange}
-                            onRun={handleRunTest}
-                            result={result}
-                            isReady={isReady}
-                            fileName={editorFileName}
-                            errorMarkers={!isTDD ? result.markers : undefined}
-                          />
-
-                          {/* 操作区 */}
-                          {/* 真实模块（只读）：vi.mock 等依赖的源文件，可切换查看 */}
-                          {currentLesson?.extraFiles && Object.keys(currentLesson.extraFiles).length > 0 && (
-                            <Tabs
-                              defaultActiveKey={Object.keys(currentLesson.extraFiles)[0]}
-                              items={Object.entries(currentLesson.extraFiles).map(([name, content]) => ({
-                                key: name,
-                                label: name,
-                                children: (
-                                  <CodeEditor
-                                    value={content}
-                                    fileName={name}
-                                    language="typescript"
-                                    readOnly
-                                    onChange={() => {}}
-                                    onRun={() => {}}
-                                    result={{ status: 'idle', output: '' }}
-                                    isReady={isReady}
-                                  />
-                                ),
-                              }))}
-                            />
-                          )}
-
-                          <div className={styles.solutionToggle}>
-                            <Space wrap>
-                              <Button
-                                type="primary"
-                                ghost={!showSolution}
-                                icon={<ThunderboltOutlined />}
-                                onClick={() => setShowSolution(!showSolution)}
-                              >
-                                {showSolution ? '隐藏参考答案' : '查看参考答案'}
-                              </Button>
-                              <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                                重置代码
-                              </Button>
-                              <Button icon={<DownloadOutlined />} onClick={handleExport}>
-                                导出代码
-                              </Button>
-                              <Switch
-                                checkedChildren="自动运行"
-                                unCheckedChildren="手动"
-                                checked={autoRun}
-                                onChange={setAutoRun}
-                              />
-                            </Space>
-                            <Text type="secondary" className={styles.solutionHint}>
-                              （先自己尝试，再看答案效果更好）
-                            </Text>
-                          </div>
-                        </>
-                      ),
-                    },
-                    {
-                      key: 'copy',
-                      label: '复制运行',
-                      children: (
-                        <div className={styles.copyRun}>
-                          <Alert
-                            type="info"
-                            showIcon
-                            message="一键复制到本地运行"
-                            description="点击每个文件对应的「复制」按钮，在本地项目对应路径新建同名文件保存（与本课时的文件名保持一致），然后在项目根目录执行 `npx vitest run` 即可看到与浏览器内完全一致的表现。"
-                            className={styles.copyRunHint}
-                          />
-                          {copyFiles.length === 0 ? (
-                            <p className={styles.copyRunEmpty}>本课时无可复制的文件。</p>
-                          ) : (
-                            <Tabs
-                              defaultActiveKey={copyFiles[0]?.name}
-                              items={copyFiles.map((f) => ({
-                                key: f.name,
-                                label: f.name,
-                                children: (
-                                  <div className={styles.copyFile}>
-                                    <Space style={{ marginBottom: 8 }}>
-                                      <Button
-                                        icon={<CopyOutlined />}
-                                        onClick={() => copyToClipboard(f.content, f.name)}
-                                      >
-                                        复制 {f.name}
-                                      </Button>
-                                      <Tag>{f.content.length} 字符</Tag>
-                                    </Space>
-                                    <CodeEditor
-                                      value={f.content}
-                                      fileName={f.name}
-                                      language="typescript"
-                                      readOnly
-                                      onChange={() => {}}
-                                      onRun={() => {}}
-                                      result={{ status: 'idle', output: '' }}
-                                      isReady={isReady}
-                                    />
-                                  </div>
-                                ),
-                              }))}
-                            />
-                          )}
-                        </div>
-                      ),
-                    },
-                  ]}
+                {/* 代码编辑器 */}
+                <CodeEditor
+                  value={showSolution && currentLesson?.solution ? currentLesson.solution : code}
+                  onChange={handleCodeChange}
+                  onRun={handleRunTest}
+                  result={result}
+                  isReady={isReady}
+                  fileName={editorFileName}
+                  errorMarkers={!isTDD ? result.markers : undefined}
                 />
+
+                {/* 操作区 */}
+                {/* 真实模块（只读）：vi.mock 等依赖的源文件，可切换查看 */}
+                {currentLesson?.extraFiles && Object.keys(currentLesson.extraFiles).length > 0 && (
+                  <Tabs
+                    defaultActiveKey={Object.keys(currentLesson.extraFiles)[0]}
+                    items={Object.entries(currentLesson.extraFiles).map(([name, content]) => ({
+                      key: name,
+                      label: name,
+                      children: (
+                        <CodeEditor
+                          value={content}
+                          fileName={name}
+                          language="typescript"
+                          readOnly
+                          onChange={() => {}}
+                          onRun={() => {}}
+                          result={{ status: 'idle', output: '' }}
+                          isReady={isReady}
+                        />
+                      ),
+                    }))}
+                  />
+                )}
+
+                <div className={styles.solutionToggle}>
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      ghost={!showSolution}
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => setShowSolution(!showSolution)}
+                    >
+                      {showSolution ? '隐藏参考答案' : '查看参考答案'}
+                    </Button>
+                    <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                      重置代码
+                    </Button>
+                    <Button icon={<DownloadOutlined />} onClick={handleExport}>
+                      导出代码
+                    </Button>
+                    <Switch
+                      checkedChildren="自动运行"
+                      unCheckedChildren="手动"
+                      checked={autoRun}
+                      onChange={setAutoRun}
+                    />
+                  </Space>
+                  <Text type="secondary" className={styles.solutionHint}>
+                    （先自己尝试，再看答案效果更好）
+                  </Text>
+                </div>
               </section>
 
               {/* 上下课时导航 */}
