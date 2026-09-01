@@ -22,6 +22,18 @@ function vitestRunnerMiddleware() {
 
 export default defineConfig({
   plugins: [react(), vitestRunnerMiddleware()],
+  build: {
+    chunkSizeWarningLimit: 2500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          monaco: ['monaco-editor', '@monaco-editor/react'],
+          antd: ['antd', '@ant-design/icons'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

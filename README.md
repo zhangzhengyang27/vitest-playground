@@ -96,8 +96,8 @@
 
 ```bash
 cd vitest-playground
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 ## 技术栈
@@ -108,7 +108,6 @@ npm run dev
 - react-router-dom v7（路由）
 - Monaco Editor（代码编辑器，本地打包，含行号/补全/暗色主题）
 - Vitest 4 + @testing-library/react（测试）
-- highlight.js（文档代码高亮）
 - `@vitest/coverage-v8`（覆盖率）
 - 服务端运行器（见 `vitestServerRunner.ts`）：在本机沙箱目录用「项目已安装的 vitest」真实运行用户代码
 
@@ -134,7 +133,7 @@ npm run dev
 ## 运行注意
 
 - 页面仍设置了跨域隔离头（`Cross-Origin-Embedder-Policy: require-corp` 与 `Cross-Origin-Opener-Policy: same-origin`），主要用于 Monaco Worker 同源加载与一致性，并非运行 Vitest 所必需。
-- 首次运行测试时，若本机 `node_modules` 未安装 `vitest` 等依赖，请先执行 `npm install`；依赖就绪后即可离线运行。
+- 首次运行测试时，若本机 `node_modules` 未安装 `vitest` 等依赖，请先执行 `pnpm install`；依赖就绪后即可离线运行。
 - 运行器会在本机执行用户代码，仅适用于本地学习工具。
 
 > 说明：本项目已从 Ant Design Pro（Umi Max）模板剥离，仅保留 antd 组件库。

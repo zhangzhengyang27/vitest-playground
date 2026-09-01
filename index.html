@@ -3,7 +3,96 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vitest 可视化学习平台</title>
+    <title>Vitest 可视化学习平台 | 交互式前端单元测试教程</title>
+    <meta name="description" content="基于 Vite + React + 真实 Vitest 的交互式学习平台：内置代码编辑器，浏览器内实时运行测试，系统掌握 Vitest 断言、Mock、快照、覆盖率与 TDD 实战。" />
+    <meta name="keywords" content="Vitest, 前端测试, 单元测试, Jest 替代, TDD, Mock, 快照测试, 测试覆盖率, React 测试, JavaScript 测试教程" />
+    <meta name="author" content="Vitest Playground" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0b1020" />
+    <meta name="application-name" content="Vitest 可视化学习平台" />
+    <link rel="canonical" href="https://vitest-playground.zhangzhengyang.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="Vitest 可视化学习平台" />
+    <meta property="og:title" content="Vitest 可视化学习平台 | 交互式前端单元测试教程" />
+    <meta property="og:description" content="内置代码编辑器，浏览器内实时运行真实 Vitest，边写边测掌握前端测试。" />
+    <meta property="og:url" content="https://vitest-playground.zhangzhengyang.com/" />
+    <meta property="og:image" content="https://vitest-playground.zhangzhengyang.com/og-cover.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vitest 可视化学习平台 | 交互式前端单元测试教程" />
+    <meta name="twitter:description" content="内置代码编辑器，浏览器内实时运行真实 Vitest，边写边测掌握前端测试。" />
+    <meta name="twitter:image" content="https://vitest-playground.zhangzhengyang.com/og-cover.png" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://vitest-playground.zhangzhengyang.com/#website",
+          "url": "https://vitest-playground.zhangzhengyang.com/",
+          "name": "Vitest 可视化学习平台",
+          "description": "基于 Vite + React + 真实 Vitest 的交互式前端测试学习平台，内置代码编辑器，浏览器内实时运行测试。",
+          "inLanguage": "zh-CN",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://vitest-playground.zhangzhengyang.com/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "Course",
+          "name": "Vitest 可视化学习平台",
+          "description": "从第一个测试用例到 TDD 实战的系统化前端单元测试课程，覆盖断言、Mock、快照、异步、覆盖率与 React 组件测试。",
+          "inLanguage": "zh-CN",
+          "provider": { "@type": "Organization", "name": "Vitest Playground" },
+          "educationalLevel": "Beginner",
+          "teaches": ["Vitest", "前端单元测试", "TDD", "Mock", "快照测试", "测试覆盖率", "React 组件测试"],
+          "hasCourseInstance": {
+            "@type": "CourseInstance",
+            "courseMode": "online",
+            "courseWorkload": "PT10H"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Vitest 是什么？",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Vitest 是由 Vite 驱动的下一代前端测试框架，API 兼容 Jest，启动快、配置少，原生支持 ESM、TypeScript 与 JSX，与 Vite 生态无缝集成。"
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Vitest 和 Jest 有什么区别？",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Vitest 基于 Vite，无需额外转译配置即可支持 TypeScript 与 ESM；其 expect/describe/it 与 Jest 高度兼容，迁移成本低；并自带 watch 模式、覆盖率收集与开箱即用的 happy-dom/jsdom 环境。"
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "这个平台可以离线运行测试吗？",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "可以。平台通过本地 Vite 服务端的中间件用本机真实安装的 Vitest 运行用户代码，只要本机已执行 pnpm install 安装依赖，无需联网即可运行。"
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "零基础能学单元测试吗？",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "适合。课程从第一个测试用例讲起，循序渐进覆盖匹配器、Mock、快照、异步、覆盖率到 TDD 实战，每个课时都可在浏览器内编写代码并即时运行查看结果。"
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

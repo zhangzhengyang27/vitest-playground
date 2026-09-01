@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vitest-playground.zhangzhengyang.com/sitemap.xml

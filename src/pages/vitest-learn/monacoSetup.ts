@@ -1,23 +1,17 @@
 /**
- * Monaco 本地打包配置。
- * 由于 WebContainer 需要 COEP: require-corp 跨域隔离，
- * 不能直接从 jsdelivr CDN 加载 Monaco（会被浏览器拦截），
- * 因此改为本地打包并配置同源 Worker。
+ * Monaco 本地打包配置（仅 TS/JS，按需裁剪其余语言以大幅减小产物体积）。
+ * 平台只用 TypeScript/JavaScript 编辑器，因此只引入编辑器内核 +
+ * typescript 语言贡献，不再打包 json/css/html 等用不到的语言与 worker。
  */
-import * as monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import { loader } from '@monaco-editor/react';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { VITEST_GLOBALS_DTS } from './vitestGlobalsDts';
 
 self.MonacoEnvironment = {
   getWorker(_workerId, label) {
-    if (label === 'json') return new jsonWorker();
-    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker();
-    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker();
     if (label === 'typescript' || label === 'javascript') return new tsWorker();
     return new editorWorker();
   },

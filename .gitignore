@@ -8,6 +8,7 @@
 .DS_Store
 npm-debug.log*
 .vitest-sandbox
+.playwright-mcp/
 yarn-error.log
 /coverage
 .idea

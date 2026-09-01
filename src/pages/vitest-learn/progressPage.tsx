@@ -14,6 +14,7 @@ import {
 import AppLayout from '../../components/AppLayout';
 import { chapters } from './data';
 import { isLessonPassed, clearProgress } from './progress';
+import { usePageMeta } from '../../usePageMeta';
 import styles from './welcome.module.css';
 
 const PROGRESS_KEY = 'vitest-playground-progress-v1';
@@ -29,6 +30,11 @@ const BADGES = [
 const ProgressPage: React.FC = () => {
   const navigate = useNavigate();
   const [version, setVersion] = useState(0);
+
+  usePageMeta(
+    '学习进度 | Vitest 可视化学习平台',
+    '查看你在 Vitest 可视化学习平台的整体与分章学习进度、成就徽章，支持进度导出与重置。',
+  );
 
   const { total, passed, perChapter, badges } = useMemo(() => {
     const perChapter = chapters.map((c) => {

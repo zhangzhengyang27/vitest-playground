@@ -16,6 +16,7 @@ import {
 import { Button, Progress, Tag, Input } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
+import { usePageMeta } from '../../usePageMeta';
 import { chapters } from './data';
 import { isLessonPassed } from './progress';
 import styles from './welcome.module.css';
@@ -61,6 +62,7 @@ const FEATURES = [
 ];
 
 const Welcome: React.FC = () => {
+  usePageMeta();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState('全部');

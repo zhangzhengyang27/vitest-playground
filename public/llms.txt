@@ -1,0 +1,47 @@
+# Vitest 可视化学习平台
+
+> 基于 Vite + React + 真实 Vitest 的交互式前端测试学习平台。内置 Monaco 代码编辑器，浏览器内实时运行真实 Vitest，边写边测，系统掌握前端单元测试与 TDD。
+
+## 它是什么
+Vitest 可视化学习平台（vitest-playground）是一个面向前端工程师与测试初学者的在线教程。与纯文档不同，它把"编辑器 + 真实测试运行器"放在浏览器里：用户改代码，平台通过本地 Vite 服务端的中间件 /api/run-vitest 用本机真实安装的 Vitest 运行测试，并把结构化结果（通过/失败、覆盖率、逐用例耗时、失败行内定位）返回页面。无需在本地另开终端即可学习 Vitest。
+
+## 核心能力
+- 真实 Vitest 运行：多文件、vi.mock、快照、覆盖率与本地完全一致；离线可用（只要本机 pnpm install 过）。
+- 真代码编辑器：Monaco，支持行号、补全、明暗主题、Ctrl/Cmd+Enter 运行。
+- 覆盖率可视化、失败用例在编辑器对应行标红并附错误、逐用例耗时。
+- 进度持久化（localStorage）、知识小测、TDD 自动批改（可见 grader + 隐藏 hiddenGrader）、多文件预览、自动重跑、性能基准（vitest bench）。
+- 课程搜索与标签筛选、全局进度总览、代码导出。
+
+## 课程大纲（16 章）
+- [第一章：Vitest 基础入门](https://vitest-playground.zhangzhengyang.com/vitest-learn/basics)：第一个测试用例、常用匹配器、测试运行模式。
+- [第二章：测试结构](https://vitest-playground.zhangzhengyang.com/vitest-learn/structure)：describe/it、生命周期钩子、跳过与专注测试。
+- [第三章：Mock 与 Stub](https://vitest-playground.zhangzhengyang.com/vitest-learn/mock)：vi.fn()、vi.mock()、vi.spyOn()、清除与重置 Mock。
+- [第四章：异步测试](https://vitest-playground.zhangzhengyang.com/vitest-learn/async)：async/await、Promise 链式、错误处理测试。
+- [第五章：数组和对象测试](https://vitest-playground.zhangzhengyang.com/vitest-learn/array-object)：toEqual vs toBe、数组/对象匹配器、组合匹配器。
+- [第六章：Timer 和 Fake Timers](https://vitest-playground.zhangzhengyang.com/vitest-learn/timers)：假时钟、setInterval 测试、Date 对象假时钟。
+- [第七章：Snapshot 测试](https://vitest-playground.zhangzhengyang.com/vitest-learn/snapshot)：基础快照、更新快照。
+- [第八章：高级测试技巧](https://vitest-playground.zhangzhengyang.com/vitest-learn/advanced)：参数化测试、自定义匹配器、测试配置与隔离。
+- [第九章：覆盖率与高级技巧](https://vitest-playground.zhangzhengyang.com/vitest-learn/coverage-advanced)：测试覆盖率、标签与筛选、并发测试、重试、mock 进阶、性能基准。
+- [第十章：测试替身](https://vitest-playground.zhangzhengyang.com/vitest-learn/test-doubles)：Dummy/Stub/Spy/Fake 及对比。
+- [第十一章：测试数据构建](https://vitest-playground.zhangzhengyang.com/vitest-learn/fixture)：隐式 vs 内联 Fixture、工厂函数、序列工厂。
+- [第十二章：Vitest 与 Jest 对比](https://vitest-playground.zhangzhengyang.com/vitest-learn/vitest-vs-jest)：语法对比、Jest 迁移到 Vitest、为什么选 Vitest。
+- [第十三章：测试策略](https://vitest-playground.zhangzhengyang.com/vitest-learn/test-strategy)：状态验证 vs 行为验证、独居测试 vs 群居测试、不需要测试的代码。
+- [第十四章：TDD 实战演练](https://vitest-playground.zhangzhengyang.com/vitest-learn/tdd-practice)：FizzBuzz、变位词、闰年、回文、凯撒密码。
+- [第十五章：React 组件测试（jsdom）](https://vitest-playground.zhangzhengyang.com/vitest-learn/react-testing)：渲染组件、状态与事件、受控输入（happy-dom）。
+- [第十六章：TDD 进阶实战](https://vitest-playground.zhangzhengyang.com/vitest-learn/tdd-advanced)：罗马数字、有效括号。
+
+## 适合谁
+零基础到进阶的前端开发者：想系统学习单元测试、从 Jest 迁移到 Vitest、用 TDD 方式刷题，或把 React 组件测试纳入工作流的人。
+
+## 如何运行（自部署）
+1. pnpm install
+2. pnpm dev（开发）或 pnpm preview（预览，含 /api/run-vitest 中间件）
+3. 注意：测试运行依赖本地 Vite 服务端，纯静态托管无法运行测试；部署时需以 pnpm preview 或带该中间件的 Node 服务方式运行，并配置跨域隔离头（COEP/COOP）。
+
+## 技术栈
+Vite 6、React 19、antd v6、react-router-dom v7、Monaco Editor（本地打包，仅 TS/JS）、Vitest 4、@testing-library/react、@vitest/coverage-v8。
+
+## 常见问题
+- Vitest 是什么？ 由 Vite 驱动的下一代前端测试框架，API 兼容 Jest，启动快、配置少，原生支持 ESM、TypeScript、JSX。
+- Vitest 和 Jest 有什么区别？ 基于 Vite，无需额外转译即可支持 TS/ESM；expect/describe/it 与 Jest 高度兼容，迁移成本低；自带 watch、覆盖率与开箱即用的 happy-dom/jsdom。
+- 能离线运行吗？ 能。只要本机 pnpm install 过依赖，运行用户代码走本地真实 Vitest，无需联网。

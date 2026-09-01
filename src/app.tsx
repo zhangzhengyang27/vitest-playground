@@ -1,6 +1,8 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import Welcome from './pages/vitest-learn';
 import Chapter from './pages/vitest-learn/chapter';
+import ProgressPage from './pages/vitest-learn/progressPage';
+import { ThemeProvider } from './theme';
 
 const router = createBrowserRouter([
   {
@@ -16,11 +18,19 @@ const router = createBrowserRouter([
     element: <Chapter />,
   },
   {
+    path: '/progress',
+    element: <ProgressPage />,
+  },
+  {
     path: '*',
     element: <Welcome />,
   },
 ]);
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
+  );
 }

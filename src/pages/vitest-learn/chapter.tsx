@@ -4,6 +4,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { usePageMeta } from '../../usePageMeta';
 import {
   Button,
   Space,
@@ -53,6 +54,11 @@ const LessonPage: React.FC = () => {
   const effectiveLessonKey = lessonKey || chapter?.lessons[0]?.key;
   const currentLessonIndex = chapter?.lessons.findIndex((l) => l.key === effectiveLessonKey) ?? 0;
   const currentLesson = chapter?.lessons[currentLessonIndex];
+
+  // 逐路由 SEO：动态设置页面标题（如「第三章：Mock 与 Stub | Vitest 可视化学习平台」）
+  usePageMeta(
+    currentLesson?.title ? `${currentLesson.title} | Vitest 可视化学习平台` : undefined,
+  );
   // TDD 课时：存在 grader（可见测试）即进入 TDD 模式，用户编辑实现，测试由 grader 提供
   const isTDD = !!currentLesson?.grader;
   // jsdom 课时（React 组件测试）：用户编辑 .tsx 组件，测试文件为 .spec.tsx
