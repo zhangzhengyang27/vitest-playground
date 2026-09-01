@@ -4,6 +4,7 @@
  * typescript 语言贡献，不再打包 json/css/html 等用不到的语言与 worker。
  */
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution';
 import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import { loader } from '@monaco-editor/react';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
