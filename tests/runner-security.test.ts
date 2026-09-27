@@ -24,7 +24,7 @@ describe('sanitizeEntryName（沙箱文件名白名单）', () => {
   });
 
   it('拒绝覆盖运行器自身配置', () => {
-    for (const name of ['vitest.config.js', 'setup.ts', 'package.json', 'result.json']) {
+    for (const name of ['vitest.config.js', 'setup.ts', 'package.json', 'result.json', 'vitest.config.ts', 'vitest.config.mjs', 'vite.config.ts', 'VITEST.CONFIG.JS', 'Setup.TS', 'package.JSON']) {
       expect(() => sanitizeEntryName(name)).toThrow('非法文件名');
     }
   });
