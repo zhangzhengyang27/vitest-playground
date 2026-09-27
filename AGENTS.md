@@ -14,7 +14,7 @@
 
 1. 浏览器把用户代码 `POST /api/run-vitest`（同源 JSON）。
 2. `vite.config.ts` 里的 `vitestRunnerMiddleware()` 插件把这个接口挂到 **dev 服务器与 preview 服务器** 上。
-3. `vitestServerRunner.ts` 的 `handleRunVitest` 在 `.vitest-sandbox/` 临时目录里用 `node_modules/vitest/vitest.mjs` **真正起进程跑测试**（带 60s 超时并强制 kill），把 `RunResult` 返回前端。
+3. `vitestServerRunner.ts` 的 `handleRunVitest` 在 `.vitest-runs/run-<rand>/` 每请求独立临时目录里用 `node_modules/vitest/vitest.mjs` **真正起进程跑测试**（带 60s 超时并强制 kill，跑完即删），把 `RunResult` 返回前端。
 4. 前端 `runner.ts` 的 `runVitest()` 负责请求与解析，`chapter.tsx` 的 `useRealVitest` 钩子驱动 UI。
 
 **推论（非常重要）**：测试能力依赖 Vite 的 dev/preview 服务器及其自定义中间件。纯静态托管（Vercel 静态、GitHub Pages 等）**跑不了测试**——必须用一个包含该中间件的 Node 服务来托管，或本地 `pnpm dev` / `pnpm preview`。
@@ -61,6 +61,7 @@ pnpm test:coverage    # 覆盖率
 index.html                 # 入口；含 SEO/OG/JSON-LD 元信息
 vite.config.ts             # 插件（含 /api/run-vitest 中间件）、manualChunks、COEP/COOP 头、allowedHosts
 vitestServerRunner.ts      # 服务端 Vitest 运行器（替代 WebContainer）
+.vitest-runs/              # 运行临时目录根（每次运行独立 run-<rand> 子目录，跑完即删，已 gitignore）
 src/
   main.tsx, app.tsx        # 入口与路由（/、/vitest-learn/:chapterKey、/vitest-learn/:chapterKey/:lessonKey、/progress）
   usePageMeta.ts           # 逐路由动态 title/description（零依赖）
@@ -111,13 +112,13 @@ interface Chapter { key: string; title: string; description: string; lessons: Le
 ## 铁律（改动前务必遵守）
 
 1. **不要删除或绕过** `vitestRunnerMiddleware`（`vite.config.ts`）与 `vitestServerRunner.ts`——这是产品的核心能力。本地预览/测试都依赖它。
-2. **安全敏感**：运行器在本机执行用户代码，仅用于本地/受信学习环境。不要把它暴露到公网或不可信网络；已加超时与 kill 兜底，改动时不要削弱。
+2. **安全敏感**：运行器在本机执行用户代码，仅用于本地/受信学习环境。不要把它暴露到公网或不可信网络；已加超时与 kill 兜底，改动时不要削弱。运行器已按「受限执行」加固：文件名白名单、最小 env、独立临时目录、2 并发/8 排队（满则 429）。修改时不要放宽这些限制；如需更强隔离应迁移到一次性容器，而不是回退共享目录模式。
 3. **包管理器用 pnpm**，不要生成 `package-lock.json`；若误生成请删除（保留 `pnpm-lock.yaml`）。
 4. **Monaco 体积**：构建已用 `manualChunks` 把 monaco/antd/react 拆分，且 `chunkSizeWarningLimit: 2500`。不要引入其它重型依赖或改坏该拆分。
 5. **COEP/COOP 头**（`server` 与 `preview` 均已设 `Cross-Origin-Embedder-Policy: require-corp` 与 `Cross-Origin-Opener-Policy: same-origin`）——Monaco worker 跨域隔离所需，**不要删除**。部署到生产宿主时也要配置同样的响应头。
 6. **部署约束**：纯静态托管无法运行测试（无中间件）。要运行测试必须托管包含该中间件的 Node 服务；若只部署静态站点，需明确告知用户测试功能不可用。生产 `preview.allowedHosts` 含本站域名。
 7. **SEO 资源保持同步**：`public/og-cover.png` 保持 1200×630；改路由/域名时同步更新 `public/sitemap.xml`、`public/llms.txt`、`public/robots.txt` 与 `index.html` 中的 `zhangzhengyang.com` 相关链接与 `usePageMeta` 标题。
-8. **不要提交** `dist/`（构建产物，已 gitignore）与 `.vitest-sandbox/`（运行临时目录）。
+8. **不要提交** `dist/`（构建产物，已 gitignore）与 `.vitest-runs/`（运行临时目录）。
 
 ## 发布核对清单（简短）
 
@@ -127,3 +128,4 @@ interface Chapter { key: string; title: string; description: string; lessons: Le
 - [ ] 本地 `pnpm preview` 能正常跑测试（验证中间件）
 - [ ] 远程 `origin` 指向**自己的仓库**（默认仍是 ant-design-pro 的占位地址，需改）
 - [ ] 生产托管配置了 COEP/COOP 响应头（若需测试功能）
+- [ ] 服务器 nginx 已配置 /api/run-vitest 按 IP 限流（见 docs/deploy/runbook.md）
