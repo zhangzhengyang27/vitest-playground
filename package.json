@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.34.5",
   "description": "Vitest 可视化学习平台 —— 基于 Vite + React + Vitest 的轻量 playground",
   "scripts": {
     "dev": "vite",
@@ -12,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "check:lessons": "node --experimental-strip-types scripts/check-lessons.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.3",
