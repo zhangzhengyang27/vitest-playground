@@ -697,7 +697,7 @@ test('fetch user', async () => {
 `,
         solution: `// 异步测试完整示例
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const fetchUser = (id) => Promise.resolve({ id, name: \`User \${id}\`);
+const fetchUser = (id) => Promise.resolve({ id, name: \`User \${id}\` });
 const fetchUserAsync = async (id) => {
   await delay(10);
   return { id, name: \`User \${id}\` };
@@ -3104,11 +3104,11 @@ afterEach(() => {
   // 清理
 });
 
-// 常用匹配器
-expect(value).toBe(expected);
-expect(value).toEqual(expected);
-expect(value).toContain(item);
-expect(value).toThrow();
+// 常用匹配器语法一致，实际使用时需写在 test 内并先定义变量：
+// expect(value).toBe(expected);
+// expect(value).toEqual(expected);
+// expect(value).toContain(item);
+// expect(value).toThrow();
 `,
         solution: `// Vitest vs Jest 完整对比
 // ========================
