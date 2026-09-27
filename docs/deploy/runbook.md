@@ -33,7 +33,7 @@ server {
 }
 ```
 
-生效：`nginx -t && nginx -s reload`。验证：`for i in $(seq 1 6); do curl -s -o /dev/null -w '%{http_code}\n' -X POST https://vitest-playground.zhangzhengyang.com/api/run-vitest; done` —— 第 4 个起应出现 429。
+生效：`nginx -t && nginx -s reload`。验证：`for i in $(seq 1 6); do curl -s -o /dev/null -w '%{http_code}\n' -X POST https://vitest-playground.zhangzhengyang.com/api/run-vitest; done` —— 若 6 次 curl 在 6 秒内连发，约第 4~5 个起应出现 429（精确序号随 nginx 版本的桶算法细节略有差异）；若全部返回 200，说明限流未生效。
 
 ## 环境变量泄露面检查（一次性，务必执行）
 
