@@ -221,18 +221,30 @@ function parseBenchJson(raw: string): RunResult {
 function readBody(req: IncomingMessage): Promise<RunBody> {
   return new Promise((resolve, reject) => {
     let data = '';
+    let settled = false; // 防双重 settle；超限销毁后丢弃残余 chunk，不再拼接
     req.on('data', (chunk) => {
+      if (settled) return;
       data += chunk;
-      if (data.length > 5 * 1024 * 1024) reject(new Error('提交内容过大'));
+      if (data.length > 5 * 1024 * 1024) {
+        settled = true;
+        req.destroy();
+        reject(new Error('提交内容过大'));
+      }
     });
     req.on('end', () => {
+      if (settled) return;
       try {
         resolve(JSON.parse(data) as RunBody);
       } catch {
         reject(new Error('请求体不是合法 JSON'));
       }
     });
-    req.on('error', reject);
+    req.on('error', (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
   });
 }
 
@@ -258,6 +270,8 @@ export async function runInSandbox(
   options: RunInSandboxOptions = {},
 ): Promise<RunResult> {
   const { coverage = false, benchmark = false, timeoutMs = RUN_TIMEOUT } = options;
+  // 防线纵深：运行超时即便被注入也不得超过生产默认 RUN_TIMEOUT
+  const effectiveTimeoutMs = Math.min(timeoutMs, RUN_TIMEOUT);
   const names = Object.keys(files ?? {});
   if (names.length === 0) return failResult('缺少文件');
   if (names.length > MAX_FILES) return failResult(`文件数量超过上限（${MAX_FILES}）`);
@@ -269,7 +283,7 @@ export async function runInSandbox(
     for (const [name, contents] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(runDir, name), contents);
     }
-    return await spawnVitest(runDir, { coverage, benchmark, timeoutMs });
+    return await spawnVitest(runDir, { coverage, benchmark, timeoutMs: effectiveTimeoutMs });
   } finally {
     await fs.promises.rm(runDir, { recursive: true, force: true });
   }
@@ -319,8 +333,13 @@ function spawnVitest(
     });
 
     let out = '';
-    child.stdout.on('data', (d) => (out += d.toString()));
-    child.stderr.on('data', (d) => (out += d.toString()));
+    // 尾部窗口：只累计前 1MB 输出，防用户海量 stdout 打爆宿主内存（解析主路径是 result.json，消费方只读尾部 slice(-2000)）
+    child.stdout.on('data', (d) => {
+      if (out.length < 1_000_000) out += d.toString();
+    });
+    child.stderr.on('data', (d) => {
+      if (out.length < 1_000_000) out += d.toString();
+    });
 
     let killed = false;
     const killGroup = () => {
@@ -337,7 +356,7 @@ function spawnVitest(
       resolve(failResult(`Vitest 运行超时（${opts.timeoutMs / 1000}s，可能有用例陷入死循环）:\n${out.slice(-2000)}`));
     }, opts.timeoutMs);
 
-    child.on('exit', () => {
+    child.on('close', () => {
       clearTimeout(timer);
       if (killed) return; // 超时分支已 resolve
       const coverageData = opts.coverage ? readCoverage(runDir) : undefined;

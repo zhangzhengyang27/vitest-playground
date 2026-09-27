@@ -168,3 +168,26 @@ describe('handleRunVitest（API 层快速失败）', () => {
     expect(JSON.parse(body).success).toBe(true);
   });
 });
+
+describe('最终审查修复波（内存 DoS 加固）', () => {
+  it('海量 stdout 不破坏解析且进程稳定', { timeout: 30_000 }, async () => {
+    const result = await runInSandbox({
+      'lesson.spec.ts': `import { it, expect } from 'vitest';\nit('flood', () => { for (let i = 0; i < 20000; i++) console.log('x'.repeat(200)); expect(1).toBe(1); });\n`,
+    });
+    expect(result.success).toBe(true);
+    expect(result.passed).toBe(1);
+  });
+
+  it('超过 5MB 的请求体被 400 拒绝', { timeout: 15_000 }, async () => {
+    const req = new PassThrough();
+    (req as any).method = 'POST';
+    req.on('error', () => {}); // destroy 后的残余流错误与本断言无关
+    const { res, done } = collectRes();
+    const pending = handleRunVitest(req as unknown as import('node:http').IncomingMessage, res); // 先挂 readBody 监听再灌数据
+    req.write('x'.repeat(5 * 1024 * 1024 + 1));
+    req.end();
+    await pending;
+    const { statusCode } = await done;
+    expect(statusCode).toBe(400);
+  });
+});
