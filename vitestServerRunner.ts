@@ -24,7 +24,7 @@ const RUN_TIMEOUT = 60_000;
 const MAX_FILES = 20;
 
 /** 受保护文件：运行器自身写入沙箱的配置，禁止被请求覆盖（对 name 小写化后全量比对，防大小写变体在不区分大小写的文件系统上覆盖真实文件） */
-const PROTECTED_NAMES = new Set(['vitest.config.js', 'setup.ts', 'package.json', 'result.json']);
+const PROTECTED_NAMES = new Set(['vitest.config.js', 'setup.ts', 'package.json', 'result.json', 'tsconfig.json']);
 /** vitest/vite 任意扩展名的配置文件一律拒绝（Vitest 4 配置解析含 .ts/.mts/.cts/.js/.mjs/.cjs） */
 const VITE_CONFIG_RE = /^(vitest|vite)\.config\./i;
 /** 沙箱文件名白名单：扁平名、无路径分隔符、无 `..`（data.ts 的 extraFiles 均为扁平名，已确认兼容） */
@@ -83,9 +83,9 @@ function writeRunConfig(runDir: string, coverage: boolean) {
     environment: 'node',
     setupFiles: ['./setup.ts'],
     include: ['*.spec.ts', '*.spec.tsx', '*.test.ts', '*.test.tsx'],
+    coverage: { reporter: ['json-summary'], ${coverage ? 'enabled: true' : 'enabled: false'} },
   },
   esbuild: { jsx: 'automatic' },
-  coverage: { reporter: ['json-summary'], ${coverage ? 'enabled: true' : 'enabled: false'} },
 };
 `,
   );
@@ -304,12 +304,15 @@ export function createRunLimiter(maxConcurrent: number, maxQueue: number) {
       }
       if (waiters.length >= maxQueue) throw new Error('RUNNER_BUSY');
       await new Promise<void>((r) => waiters.push(r));
-      active++;
+      // 唤醒即已持有槽位（release 所有权转移），此处不得再 active++
     },
     release(): void {
-      active = Math.max(0, active - 1);
       const next = waiters.shift();
-      if (next) next();
+      if (next) {
+        next(); // 槽位所有权直接移交排队者，active 保持不变（消除微任务间隙超订）
+        return;
+      }
+      active = Math.max(0, active - 1);
     },
   };
 }

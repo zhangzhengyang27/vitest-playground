@@ -191,3 +191,34 @@ describe('最终审查修复波（内存 DoS 加固）', () => {
     expect(statusCode).toBe(400);
   });
 });
+
+describe('coverage 回归（修复前恒 undefined）', () => {
+  it('coverage:true 时返回覆盖率摘要', { timeout: 30_000 }, async () => {
+    const result = await runInSandbox({ 'lesson.spec.ts': PASSING_SPEC }, { coverage: true });
+    expect(result.success).toBe(true);
+    expect(result.coverage).toBeDefined();
+    expect(typeof result.coverage!.total.lines).toBe('number');
+  });
+});
+
+describe('sanitizeEntryName 追加保护', () => {
+  it('拒绝 tsconfig.json（构建侧配置）', () => {
+    expect(() => sanitizeEntryName('tsconfig.json')).toThrow('非法文件名');
+  });
+});
+
+describe('createRunLimiter（所有权转移语义）', () => {
+  it('release 将槽位直接移交排队者（active 全程不超过 max）', async () => {
+    const limiter = createRunLimiter(1, 2);
+    await limiter.acquire();
+    const q1 = limiter.acquire();
+    const q2 = limiter.acquire();
+    limiter.release(); // 交给 q1，active 仍为 1
+    await q1;
+    limiter.release(); // 交给 q2
+    await q2;
+    limiter.release(); // 无排队者，active 归零
+    limiter.release(); // 冗余 release 不产生负计数/幻影唤醒
+    await expect(limiter.acquire()).resolves.toBeUndefined();
+  });
+});
