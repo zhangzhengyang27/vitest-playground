@@ -34,15 +34,24 @@ const { chapters } = await import(`file://${compiledPath}`);
 
 const ROOT = process.cwd();
 const VITEST_BIN = path.join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-lessons-'));
+// realpath：macOS 的 os.tmpdir() 返回 /var/folders/...（符号链接），而 vitest/vite
+// 会把 spec 解析为 /private/var/...（真实路径），root 与文件路径不一致时模块被
+// 外部化，报 Cannot find module '/@fs/...'。统一用真实路径建沙箱根。
+const TMP = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-lessons-')));
 
 function writeSandbox(dir: string, files: Record<string, string>) {
   fs.mkdirSync(dir, { recursive: true });
+  // 与产品沙箱（.vitest-sandbox 位于仓库内）对齐：把仓库 node_modules 链接进沙箱，
+  // 使 react / @testing-library 等裸导入可解析（os.tmpdir() 父链上没有 node_modules）。
+  // cacheDir 重定向到沙箱内，避免经符号链接把 vite 缓存写进仓库 node_modules。
+  const nm = path.join(dir, 'node_modules');
+  if (!fs.existsSync(nm)) fs.symlinkSync(path.join(ROOT_ABS, 'node_modules'), nm, 'junction');
   fs.writeFileSync(
     path.join(dir, 'vitest.config.mjs'),
     `export default {
   test: { globals: true, environment: 'node', include: ['*.spec.ts', '*.spec.tsx'] },
   esbuild: { jsx: 'automatic' },
+  cacheDir: '.vite-cache',
 };
 `,
   );
