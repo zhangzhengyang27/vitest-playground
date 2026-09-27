@@ -19,7 +19,7 @@
   },
   "include": [
     "src/main.tsx",
-    "src/App.tsx",
+    "src/app.tsx",
     "src/vite-env.d.ts",
     "src/pages/vitest-learn/**/*",
     "tests/**/*",
