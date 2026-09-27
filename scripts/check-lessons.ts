@@ -2,11 +2,13 @@
  * 课时代码质量验证脚本：
  * 逐课时模拟 runner 的文件布局，用本地 vitest 实测 code / solution。
  * 契约：
- * - 无 solution 的课时：整课跳过，计入 skipped，不判失败（补 solution 属内容决策）
- * - solution 运行：必须通过，否则 FAIL
- * - code（starter）运行：允许「断言失败」类结果（教学性失败起点）计 WARN；
+ * - 有 solution 的课时：solution 运行必须通过，否则 FAIL；
+ *   code（starter）运行允许「断言失败」类结果（教学性失败起点）计 WARN，
  *   进程崩溃、语法错误等套件级失败、无合法 JSON 结果仍判 FAIL
- * - 摘要输出 passed / failed / warned / skipped 四个计数；仅 failed > 0 时退出码 1
+ * - 无 solution 的课时：不实测运行（补 solution 属内容决策），但其
+ *   code / grader / hiddenGrader / extraFiles 全部过 esbuild 语法门禁
+ *   （只 transform 不解析 import），损坏计 FAIL，全过计 SYN
+ * - 摘要输出 passed / failed / warned / syntax-ok / skipped 五个计数；仅 failed > 0 时退出码 1
  * 运行：node --experimental-strip-types scripts/check-lessons.ts
  */
 import { spawnSync } from 'node:child_process';
@@ -39,9 +41,17 @@ const VITEST_BIN = path.join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
 // 外部化，报 Cannot find module '/@fs/...'。统一用真实路径建沙箱根。
 const TMP = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-lessons-')));
 
+/** 语法门禁：esbuild transform（不 bundle、不解析 import），失败返回错误摘要首行，通过返回 null。
+ *  必须直接执行 esbuild 二进制（pnpm allowBuilds 下 bin/esbuild 为原生二进制，不能用 node 跑）。 */
+function checkSyntax(source: string, loader: 'ts' | 'tsx'): string | null {
+  const res = spawnSync(ESBUILD_BIN, [`--loader=${loader}`], { input: source, encoding: 'utf-8' });
+  if (res.status === 0) return null;
+  return (res.stderr ?? '').split('\n')[0].slice(0, 300) || 'esbuild transform 失败';
+}
+
 function writeSandbox(dir: string, files: Record<string, string>) {
   fs.mkdirSync(dir, { recursive: true });
-  // 与产品沙箱（.vitest-sandbox 位于仓库内）对齐：把仓库 node_modules 链接进沙箱，
+  // 与产品沙箱（.vitest-runs/run-<rand>，位于仓库内）对齐：把仓库 node_modules 链接进沙箱，
   // 使 react / @testing-library 等裸导入可解析（os.tmpdir() 父链上没有 node_modules）。
   // cacheDir 重定向到沙箱内，避免经符号链接把 vite 缓存写进仓库 node_modules。
   const nm = path.join(dir, 'node_modules');
@@ -141,6 +151,7 @@ function buildRuns(lesson: (typeof chapters)[number]['lessons'][number], which: 
 let passedCount = 0;
 let failedCount = 0;
 let warnedCount = 0;
+let syntaxOkCount = 0;
 let skippedCount = 0;
 const results: string[] = [];
 // 支持传课时 key 过滤：node scripts/check-lessons.ts key1 key2 ...
@@ -150,11 +161,33 @@ for (const chapter of chapters) {
   for (const lesson of chapter.lessons) {
     if (FILTER.size && !FILTER.has(lesson.key)) continue;
     if (!lesson.solution?.trim()) {
-      // 无 solution 的课时整课跳过：补 solution 属内容决策，不在此判失败
-      skippedCount++;
-      const line = `[SKIP] ${chapter.key}/${lesson.key}（无 solution，整课跳过）`;
-      results.push(line);
-      console.log(line);
+      // 无 solution 的课时：不实测运行，但过语法门禁——抓转义/抄录损坏
+      // （历史真实缺陷形态：模板字符串少闭合导致整段答案损坏）
+      const loader = lesson.environment === 'jsdom' ? 'tsx' : 'ts';
+      const sources: Array<[string, string, 'ts' | 'tsx']> = [
+        ['code', lesson.code, loader],
+        ...(lesson.grader ? [['grader', lesson.grader, loader] as [string, string, 'ts' | 'tsx']] : []),
+        ...(lesson.hiddenGrader ? [['hiddenGrader', lesson.hiddenGrader, loader] as [string, string, 'ts' | 'tsx']] : []),
+        ...Object.entries(lesson.extraFiles ?? {}).map(
+          ([n, c]) => [n, c, n.endsWith('.tsx') ? 'tsx' : 'ts'] as [string, string, 'ts' | 'tsx'],
+        ),
+      ];
+      const bad = sources
+        .map(([label, src, ld]) => ({ label, err: checkSyntax(src, ld) }))
+        .filter((x) => x.err !== null);
+      if (bad.length) {
+        failedCount++;
+        const line = `[FAIL] ${chapter.key}/${lesson.key} 语法门禁\n        ${bad
+          .map((b) => `${b.label}: ${b.err}`)
+          .join('\n        ')}`;
+        results.push(line);
+        console.log(line);
+      } else {
+        syntaxOkCount++;
+        const line = `[SYN] ${chapter.key}/${lesson.key}（无 solution：语法门禁通过 ${sources.length} 个源）`;
+        results.push(line);
+        console.log(line);
+      }
       continue;
     }
     for (const which of ['code', 'solution'] as const) {
@@ -187,10 +220,12 @@ for (const chapter of chapters) {
 
 console.log('\n========== 汇总 ==========');
 console.log(`总课时：${chapters.reduce((s, c) => s + c.lessons.length, 0)}`);
-console.log(`passed：${passedCount} / failed：${failedCount} / warned：${warnedCount} / skipped：${skippedCount}`);
+console.log(
+  `passed：${passedCount} / failed：${failedCount} / warned：${warnedCount} / syntax-ok：${syntaxOkCount} / skipped：${skippedCount}`,
+);
 if (failedCount > 0) {
   console.log('存在失败运行 ❌');
   process.exitCode = 1;
 } else {
-  console.log('无失败 ✅（warned 为教学性失败起点，skipped 为未提供 solution 的课时）');
+  console.log('无失败 ✅（warned 为教学性失败起点，syntax-ok 为无 solution 课时通过语法门禁）');
 }

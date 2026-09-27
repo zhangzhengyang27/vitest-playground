@@ -23,7 +23,7 @@ server {
         limit_req zone=vitest_run burst=3 nodelay;
         limit_req_status 429;
         proxy_pass http://127.0.0.1:8000;
-        proxy_read_timeout 90s;   # 大于运行器 60s 超时
+        proxy_read_timeout 600s;  # 运行器 60s 超时 × 8 深排队最长约 480s，600s 留缓冲避免排队深处被 504
     }
 
     location / {
@@ -53,10 +53,13 @@ tr '\0' '\n' < /proc/<PID>/environ | grep -iE 'key|token|secret|pass|cred|apikey
 判定与处置：
 - 输出只有域名/端口/PATH 等公开配置 → 无泄露面，记录检查日期即可。
 - 出现任何密钥/token/凭据 → 视为已泄露：立即轮换该凭据，并把新凭据改为配置文件（`chmod 600`）或 systemd `EnvironmentFile=` 注入到「不运行 preview 的」其它服务，而不是留在 preview 进程 env 里。
-- 同时检查 shell 历史 / systemd unit / crontab 里是否有导出密钥的行：`grep -riE 'export .*(KEY|TOKEN|SECRET)' ~/.bashrc ~/.zshrc /etc/systemd/system 2>/dev/null`。
+- 同时检查 shell 历史 / systemd unit / crontab 里是否有导出密钥的行：
+  `grep -riE 'export .*(KEY|TOKEN|SECRET)' ~/.bashrc ~/.zshrc /etc/systemd/system 2>/dev/null`
+  `grep -iE '(KEY|TOKEN|SECRET|PASSWORD)=' ~/.bash_history ~/.zsh_history 2>/dev/null | tail -20`
+  `crontab -l 2>/dev/null | grep -iE 'key|token|secret|password'`
 
 ## 故障处理
 
-- 跑测试一直 429：先 `pgrep -af vitest | wc -l` 看是否有卡死的 vitest 进程（正常应为 0）；有则确认运行器日志后重启 preview。
+- 跑测试一直 429：先 `pgrep -af 'vite.js preview'` 确认 preview 进程存在（正常 1-2 个：主进程 + 可能的 worker），再 `pgrep -af 'vitest.mjs' | wc -l` 看是否有卡死的 vitest 运行进程（正常应为 0）；有则确认运行器日志后重启 preview。
 - 磁盘增长：`du -sh .vitest-runs` 应接近 0；若残留大量目录说明有运行被强杀后 finally 未执行，手动 `rm -rf .vitest-runs/run-*` 并提 issue 排查。
 - 站点能开但测试报「无法连接运行服务」：preview 进程未启动或 nginx 上游端口不符。
