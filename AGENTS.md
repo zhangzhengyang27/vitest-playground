@@ -24,15 +24,17 @@
 `POST /api/run-vitest`，body：
 
 ```json
-{ "files": { "lesson.spec.ts": "..." }, "jsdom": false, "coverage": false, "benchmark": false }
+{ "chapterKey": "basics", "lessonKey": "first-test", "code": "..." }
 ```
 
 返回 `RunResult`（`src/pages/vitest-learn/types.ts`）：`{ success, passed, failed, output, tests[], markers[], coverage? }`。
 
-两种课时模式（见 `runner.ts` 的 `RunOptions`）：
-- **普通模式**：`userCode` 即用户编写的测试文件（`lesson.spec.ts`）。
-- **TDD 模式**（数据里存在 `grader`）：`userCode` 为用户实现（`lesson.ts`），`testCode` 为可见测试（`lesson.spec.ts`，主校验），`hiddenCode` 为隐藏测试（`lesson.hidden.spec.ts`，不展示、防作弊）。
-- `jsdom: true`：向测试文件注入 `// @vitest-environment jsdom` 并使用 `.tsx`（React 组件测试）。
+**测试装配在服务端完成（防篡改）**：`grader` / `hiddenGrader` / `extraFiles` / 运行环境 / coverage / benchmark 均由服务端按课时数据（`data.ts`）装配，客户端只能提交课时 key 与当前代码；`code` 之外任何注入尝试会被 400 拒绝。
+
+两种课时模式（装配规则见 `vitestServerRunner.ts` 的 `buildLessonFiles`）：
+- **普通模式**：`code` 即用户编写的测试文件（`lesson.spec.ts`）。
+- **TDD 模式**（数据里存在 `grader`）：`code` 为用户实现（`lesson.ts`），`grader` 为可见测试（`lesson.spec.ts`，主校验），`hiddenGrader` 为隐藏测试（`lesson.hidden.spec.ts`，不展示、防作弊）。
+- jsdom 课时（`environment: 'jsdom'`）：装配时向 spec/hidden 注入 `// @vitest-environment happy-dom` 并使用 `.tsx`（React 组件测试）。
 
 ## 技术栈
 

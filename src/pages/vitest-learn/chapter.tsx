@@ -129,29 +129,11 @@ const LessonPage: React.FC = () => {
       ? currentLesson.solution
       : code;
 
-    const runOpts: RunOptions = isTDD
-      ? {
-          userCode: codeToRun,
-          userFileName: isJsdom ? 'lesson.tsx' : 'lesson.ts',
-          testCode: currentLesson.grader ?? '',
-          hiddenCode: currentLesson.hiddenGrader,
-          jsdom: isJsdom,
-          extraFiles: currentLesson.extraFiles,
-          coverage: !currentLesson.benchmark,
-          benchmark: !!currentLesson.benchmark,
-        }
-      : {
-          userCode: codeToRun,
-          hiddenCode: currentLesson.grader,
-          jsdom: isJsdom,
-          extraFiles: currentLesson.extraFiles,
-          coverage: !currentLesson.benchmark,
-          benchmark: !!currentLesson.benchmark,
-        };
-
-    // 实时回传安装/运行进度，避免一直停留在一句话
-    runOpts.onProgress = (chunk: string) => {
-      setResult((r) => ({ ...r, output: r.output + chunk }));
+    // 测试装配在服务端按课时数据完成（防篡改）：客户端只提交课时 key 与当前代码
+    const runOpts: RunOptions = {
+      chapterKey,
+      lessonKey: effectiveLessonKey,
+      code: codeToRun,
     };
 
     runCode(runOpts)

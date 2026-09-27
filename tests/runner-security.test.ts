@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sanitizeEntryName } from '../vitestServerRunner';
 import { RUNS_ROOT, buildChildEnv, runInSandbox } from '../vitestServerRunner';
+import type { Lesson } from '../src/pages/vitest-learn/data';
+import { buildLessonFiles, findLesson, resolveRunOptions } from '../vitestServerRunner';
 
 describe('sanitizeEntryName（沙箱文件名白名单）', () => {
   it('放行合法课时文件名', () => {
@@ -143,29 +145,13 @@ function collectRes() {
 }
 
 describe('handleRunVitest（API 层快速失败）', () => {
-  it('路径穿越文件名返回 400，不触发运行', { timeout: 15_000 }, async () => {
-    const { res, done } = collectRes();
-    await handleRunVitest(postRequest({ files: { '../evil.ts': 'x' } }), res);
-    const { statusCode, body } = await done;
-    expect(statusCode).toBe(400);
-    expect(body).toContain('非法文件名');
-  });
-
-  it('files 缺失或为数组返回 400', { timeout: 15_000 }, async () => {
-    for (const body of [{}, { files: ['a.ts'] }]) {
+  it('非法 body（缺字段或类型错误）返回 400', { timeout: 15_000 }, async () => {
+    for (const body of [{}, { chapterKey: 42, lessonKey: 'first-test', code: 'x' }]) {
       const { res, done } = collectRes();
       await handleRunVitest(postRequest(body), res);
       const { statusCode } = await done;
       expect(statusCode).toBe(400);
     }
-  });
-
-  it('合法请求返回 200 与结构化结果', { timeout: 30_000 }, async () => {
-    const { res, done } = collectRes();
-    await handleRunVitest(postRequest({ files: { 'lesson.spec.ts': `import { it, expect } from 'vitest';\nit('ok', () => expect(1).toBe(1));\n` } }), res);
-    const { statusCode, body } = await done;
-    expect(statusCode).toBe(200);
-    expect(JSON.parse(body).success).toBe(true);
   });
 });
 
@@ -220,5 +206,77 @@ describe('createRunLimiter（所有权转移语义）', () => {
     limiter.release(); // 无排队者，active 归零
     limiter.release(); // 冗余 release 不产生负计数/幻影唤醒
     await expect(limiter.acquire()).resolves.toBeUndefined();
+  });
+});
+
+const fakeLesson = (over: Partial<Lesson> = {}): Lesson =>
+  ({ key: 'k', title: 't', description: 'd', code: '', ...over }) as Lesson;
+
+describe('buildLessonFiles（服务端装配）', () => {
+  it('TDD：grader→spec、hiddenGrader→hidden、用户码→lesson.ts', () => {
+    const files = buildLessonFiles(fakeLesson({ grader: 'G', hiddenGrader: 'H' }), 'U');
+    expect(files).toEqual({ 'lesson.ts': 'U', 'lesson.spec.ts': 'G', 'lesson.hidden.spec.ts': 'H' });
+  });
+
+  it('TDD 无 hidden：不写 hidden 文件', () => {
+    const files = buildLessonFiles(fakeLesson({ grader: 'G' }), 'U');
+    expect(files).toEqual({ 'lesson.ts': 'U', 'lesson.spec.ts': 'G' });
+  });
+
+  it('普通模式：userCode→spec；hiddenGrader→hidden', () => {
+    const files = buildLessonFiles(fakeLesson({ hiddenGrader: 'H' }), 'U');
+    expect(files).toEqual({ 'lesson.spec.ts': 'U', 'lesson.hidden.spec.ts': 'H' });
+  });
+
+  it('jsdom：.tsx 扩展名 + happy-dom pragma', () => {
+    const files = buildLessonFiles(fakeLesson({ environment: 'jsdom' }), 'U');
+    expect(Object.keys(files)).toEqual(['lesson.spec.tsx']);
+    expect(files['lesson.spec.tsx']).toMatch(/^\/\/ @vitest-environment happy-dom\n/);
+  });
+
+  it('extraFiles 由服务端并入（客户端无法篡改）', () => {
+    const files = buildLessonFiles(fakeLesson({ extraFiles: { 'api.ts': 'A' } }), 'U');
+    expect(files['api.ts']).toBe('A');
+  });
+
+  it('resolveRunOptions：benchmark 课时开 bench、关 coverage', () => {
+    expect(resolveRunOptions(fakeLesson())).toEqual({ coverage: true, benchmark: false });
+    expect(resolveRunOptions(fakeLesson({ benchmark: true }))).toEqual({ coverage: false, benchmark: true });
+  });
+
+  it('findLesson：真实课时可查、乱 key 返回 undefined', () => {
+    expect(findLesson('basics', 'first-test')?.title).toContain('第一个测试用例');
+    expect(findLesson('nope', 'nope')).toBeUndefined();
+  });
+});
+
+describe('handleRunVitest 新契约', () => {
+  it('旧 files 形态请求被 400 拒绝', async () => {
+    const { res, done } = collectRes();
+    await handleRunVitest(postRequest({ files: { 'lesson.spec.ts': 'x' } }), res);
+    expect((await done).statusCode).toBe(400);
+  });
+
+  it('未知课时被 400 拒绝', async () => {
+    const { res, done } = collectRes();
+    await handleRunVitest(postRequest({ chapterKey: 'x', lessonKey: 'y', code: 'z' }), res);
+    const { statusCode, body } = await done;
+    expect(statusCode).toBe(400);
+    expect(body).toContain('未知');
+  });
+
+  it('code 非字符串被 400 拒绝', async () => {
+    const { res, done } = collectRes();
+    await handleRunVitest(postRequest({ chapterKey: 'basics', lessonKey: 'first-test', code: 42 }), res);
+    expect((await done).statusCode).toBe(400);
+  });
+
+  it('真实课时全链路可用（basics/first-test 以其初始 code 运行通过）', { timeout: 60_000 }, async () => {
+    const { res, done } = collectRes();
+    const lesson = findLesson('basics', 'first-test')!;
+    await handleRunVitest(postRequest({ chapterKey: 'basics', lessonKey: 'first-test', code: lesson.code }), res);
+    const { statusCode, body } = await done;
+    expect(statusCode).toBe(200);
+    expect(JSON.parse(body).success).toBe(true);
   });
 });

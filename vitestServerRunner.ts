@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RunResult, CoverageSummary, CoverageFile } from './src/pages/vitest-learn/types';
+import { chapters, type Lesson } from './src/pages/vitest-learn/data';
 
 const ROOT = process.cwd();
 const VITEST_BIN = path.join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
@@ -46,12 +47,43 @@ export function sanitizeEntryName(name: unknown): string {
 }
 
 interface RunBody {
-  files: Record<string, string>;
-  jsdom: boolean;
-  /** 是否开启覆盖率收集（--coverage，reporter 见 vitest.config.js） */
-  coverage?: boolean;
-  /** 是否以基准模式运行（vitest bench） */
-  benchmark?: boolean;
+  chapterKey: unknown;
+  lessonKey: unknown;
+  code: unknown;
+}
+
+/** 按课时 key 查找课时数据（服务端装配的唯一事实来源） */
+export function findLesson(chapterKey: string, lessonKey: string): Lesson | undefined {
+  return chapters.find((c) => c.key === chapterKey)?.lessons.find((l) => l.key === lessonKey);
+}
+
+/** 运行模式由课时数据决定：bench 课时不收 coverage，其余课时默认收 coverage */
+export function resolveRunOptions(lesson: Lesson): { coverage: boolean; benchmark: boolean } {
+  return { coverage: !lesson.benchmark, benchmark: !!lesson.benchmark };
+}
+
+/**
+ * 服务端装配沙箱文件（防篡改）：grader / hiddenGrader / extraFiles / 环境与扩展名
+ * 全部来自课时数据，客户端只能提交当前代码。
+ * - TDD（有 grader）：用户实现 → lesson.*，grader → 可见主校验 spec，hiddenGrader → 隐藏 spec。
+ * - 普通（无 grader）：用户代码 → spec；hiddenGrader（如有）→ 隐藏 spec。
+ * - jsdom 课时：使用 .tsx 并为 spec/hidden 注入 happy-dom pragma。
+ */
+export function buildLessonFiles(lesson: Lesson, userCode: string): Record<string, string> {
+  const isJsdom = lesson.environment === 'jsdom';
+  const ext = isJsdom ? 'tsx' : 'ts';
+  const pragma = isJsdom ? '// @vitest-environment happy-dom\n\n' : '';
+  const files: Record<string, string> = {};
+  if (lesson.grader) {
+    files[`lesson.${ext}`] = userCode;
+    files[`lesson.spec.${ext}`] = pragma + lesson.grader;
+    if (lesson.hiddenGrader) files[`lesson.hidden.spec.${ext}`] = pragma + lesson.hiddenGrader;
+  } else {
+    files[`lesson.spec.${ext}`] = pragma + userCode;
+    if (lesson.hiddenGrader) files[`lesson.hidden.spec.${ext}`] = pragma + lesson.hiddenGrader;
+  }
+  if (lesson.extraFiles) Object.assign(files, lesson.extraFiles);
+  return files;
 }
 
 async function makeRunDir(): Promise<string> {
@@ -421,14 +453,17 @@ export async function handleRunVitest(req: IncomingMessage, res: ServerResponse)
     sendJson(res, 400, failResult(`请求无效: ${msg}`));
     return;
   }
-  if (!body.files || typeof body.files !== 'object' || Array.isArray(body.files)) {
-    sendJson(res, 400, failResult('缺少 files 字段'));
+  if (
+    typeof body.chapterKey !== 'string' ||
+    typeof body.lessonKey !== 'string' ||
+    typeof body.code !== 'string'
+  ) {
+    sendJson(res, 400, failResult('请求无效: 需要 chapterKey / lessonKey / code 三个字符串字段'));
     return;
   }
-  try {
-    for (const name of Object.keys(body.files)) sanitizeEntryName(name);
-  } catch (e) {
-    sendJson(res, 400, failResult(e instanceof Error ? e.message : String(e)));
+  const lesson = findLesson(body.chapterKey, body.lessonKey);
+  if (!lesson) {
+    sendJson(res, 400, failResult(`未知课时: ${body.chapterKey}/${body.lessonKey}`));
     return;
   }
 
@@ -439,10 +474,9 @@ export async function handleRunVitest(req: IncomingMessage, res: ServerResponse)
     return;
   }
   try {
-    const result = await runInSandbox(body.files, {
-      coverage: !!body.coverage,
-      benchmark: !!body.benchmark,
-    });
+    const files = buildLessonFiles(lesson, body.code);
+    const { coverage, benchmark } = resolveRunOptions(lesson);
+    const result = await runInSandbox(files, { coverage, benchmark });
     sendJson(res, 200, result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
