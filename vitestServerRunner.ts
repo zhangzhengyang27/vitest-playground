@@ -21,6 +21,24 @@ const VITEST_BIN = path.join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
 /** 单次执行超时（毫秒） */
 const RUN_TIMEOUT = 60_000;
 
+/** 受保护文件：运行器自身写入沙箱的配置，禁止被请求覆盖 */
+const PROTECTED_NAMES = new Set(['vitest.config.js', 'setup.ts', 'package.json', 'result.json']);
+/** 沙箱文件名白名单：扁平名、无路径分隔符、无 `..`（data.ts 的 extraFiles 均为扁平名，已确认兼容） */
+const SAFE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** 校验请求要写入沙箱的文件名；非法直接抛错（由 handleRunVitest 转 400） */
+export function sanitizeEntryName(name: unknown): string {
+  const valid =
+    typeof name === 'string' &&
+    SAFE_NAME_RE.test(name) &&
+    !name.includes('..') &&
+    !PROTECTED_NAMES.has(name);
+  if (!valid) {
+    throw new Error(`非法文件名: ${typeof name === 'string' ? name.slice(0, 50) : String(name)}`);
+  }
+  return name;
+}
+
 interface RunBody {
   files: Record<string, string>;
   jsdom: boolean;
