@@ -15,11 +15,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RunResult, CoverageSummary, CoverageFile } from './src/pages/vitest-learn/types';
 
 const ROOT = process.cwd();
-const SANDBOX = path.join(ROOT, '.vitest-sandbox');
-const COVERAGE_DIR = path.join(SANDBOX, 'coverage');
 const VITEST_BIN = path.join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
+/** 每次运行的独立临时目录根（必须在项目根之下，vitest 才能向上解析到 node_modules） */
+export const RUNS_ROOT = path.join(ROOT, '.vitest-runs');
 /** 单次执行超时（毫秒） */
 const RUN_TIMEOUT = 60_000;
+/** 单次请求允许写入的文件数上限 */
+const MAX_FILES = 20;
 
 /** 受保护文件：运行器自身写入沙箱的配置，禁止被请求覆盖（对 name 小写化后全量比对，防大小写变体在不区分大小写的文件系统上覆盖真实文件） */
 const PROTECTED_NAMES = new Set(['vitest.config.js', 'setup.ts', 'package.json', 'result.json']);
@@ -52,25 +54,29 @@ interface RunBody {
   benchmark?: boolean;
 }
 
-/** 上一轮写入的临时文件，便于每轮清理，避免跨模式/跨课时残留互相干扰 */
-const LESSON_FILE_CANDIDATES = [
-  'lesson.ts',
-  'lesson.tsx',
-  'lesson.spec.ts',
-  'lesson.spec.tsx',
-  'lesson.hidden.spec.ts',
-  'lesson.hidden.spec.tsx',
-  'result.json',
-];
+async function makeRunDir(): Promise<string> {
+  await fs.promises.mkdir(RUNS_ROOT, { recursive: true });
+  return fs.promises.mkdtemp(path.join(RUNS_ROOT, 'run-'));
+}
 
-function ensureSandbox(coverage: boolean) {
-  fs.mkdirSync(SANDBOX, { recursive: true });
-  // vitest 配置：globals / 自动 jsx；环境默认 node，jsdom 章节由文件内 pragma 覆盖。
-  // 注意：不用 reporter 的 tuple 形式（[['json',{outputFile}]] 在部分环境会被当成
-  // 自定义模块解析而崩溃），改用 CLI `--reporter=json` 并解析 stdout。
-  // coverage.reporter 设为 json-summary 备用；CLI 传 --coverage 时启用。
+/** 子进程环境变量白名单：绝不继承 process.env（防密钥经测试代码外泄） */
+export function buildChildEnv(homeDir: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    NODE_ENV: 'test',
+    HOME: homeDir,
+    LANG: process.env.LANG ?? 'C.UTF-8',
+    PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
+  };
+  if (process.platform === 'win32') {
+    if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
+    if (process.env.COMSPEC) env.COMSPEC = process.env.COMSPEC;
+  }
+  return env;
+}
+
+function writeRunConfig(runDir: string, coverage: boolean) {
   fs.writeFileSync(
-    path.join(SANDBOX, 'vitest.config.js'),
+    path.join(runDir, 'vitest.config.js'),
     `export default {
   test: {
     globals: true,
@@ -84,26 +90,13 @@ function ensureSandbox(coverage: boolean) {
 `,
   );
   // 引入 jest-dom 匹配器（happy-dom 环境下 React 测试用）
-  fs.writeFileSync(
-    path.join(SANDBOX, 'setup.ts'),
-    `import '@testing-library/jest-dom/vitest';\n`,
-  );
-}
-
-function cleanupLessonFiles() {
-  for (const name of LESSON_FILE_CANDIDATES) {
-    try {
-      fs.rmSync(path.join(SANDBOX, name));
-    } catch {
-      /* 不存在则忽略 */
-    }
-  }
+  fs.writeFileSync(path.join(runDir, 'setup.ts'), `import '@testing-library/jest-dom/vitest';\n`);
 }
 
 /** 读取覆盖率摘要（vitest --coverage 写出的 coverage-summary.json） */
-function readCoverage(): CoverageSummary | undefined {
+function readCoverage(runDir: string): CoverageSummary | undefined {
   try {
-    const summaryPath = path.join(COVERAGE_DIR, 'coverage-summary.json');
+    const summaryPath = path.join(runDir, 'coverage', 'coverage-summary.json');
     if (!fs.existsSync(summaryPath)) return undefined;
     const raw = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')) as Record<string, any>;
     const toFile = (obj: any): CoverageFile => ({
@@ -243,85 +236,110 @@ function readBody(req: IncomingMessage): Promise<RunBody> {
   });
 }
 
+export interface RunInSandboxOptions {
+  coverage?: boolean;
+  benchmark?: boolean;
+  /** 仅供测试注入；生产默认 RUN_TIMEOUT(60s)，不得调大 */
+  timeoutMs?: number;
+}
+
+/** 单次失败结果 */
+function failResult(output: string): RunResult {
+  return { success: false, output, passed: 0, failed: 1 };
+}
+
 /**
- * 在沙箱目录跑一次真实 vitest，返回结构化结果。
+ * 在独立临时目录里跑一次真实 vitest，返回结构化结果。
+ * 目录生命周期完全归属本次调用：进入时创建，finally 删除。
  * benchmark 为 true 时改用 `vitest bench` 子命令。
  */
-function runInSandbox(
+export async function runInSandbox(
   files: Record<string, string>,
-  coverage: boolean,
-  benchmark: boolean,
+  options: RunInSandboxOptions = {},
 ): Promise<RunResult> {
-  ensureSandbox(coverage);
-  cleanupLessonFiles();
-  for (const [name, contents] of Object.entries(files)) {
-    fs.writeFileSync(path.join(SANDBOX, name), contents);
-  }
+  const { coverage = false, benchmark = false, timeoutMs = RUN_TIMEOUT } = options;
+  const names = Object.keys(files ?? {});
+  if (names.length === 0) return failResult('缺少文件');
+  if (names.length > MAX_FILES) return failResult(`文件数量超过上限（${MAX_FILES}）`);
+  for (const name of names) sanitizeEntryName(name);
 
-  return new Promise<RunResult>((resolve) => {
-    const args = benchmark
-      ? ['bench', '--root', SANDBOX, '--reporter=json']
-      : ['run', '--root', SANDBOX, '--reporter=json'];
-    if (coverage && !benchmark) args.push('--coverage');
+  const runDir = await makeRunDir();
+  try {
+    writeRunConfig(runDir, coverage);
+    for (const [name, contents] of Object.entries(files)) {
+      await fs.promises.writeFile(path.join(runDir, name), contents);
+    }
+    return await spawnVitest(runDir, { coverage, benchmark, timeoutMs });
+  } finally {
+    await fs.promises.rm(runDir, { recursive: true, force: true });
+  }
+}
+
+function spawnVitest(
+  runDir: string,
+  opts: { coverage: boolean; benchmark: boolean; timeoutMs: number },
+): Promise<RunResult> {
+  return new Promise((resolve) => {
+    const args = opts.benchmark
+      ? ['bench', '--root', runDir, '--reporter=json', '--outputFile.json=result.json']
+      : ['run', '--root', runDir, '--reporter=json', '--outputFile.json=result.json'];
+    if (opts.coverage && !opts.benchmark) args.push('--coverage');
     const child = spawn('node', [VITEST_BIN, ...args], {
-      cwd: SANDBOX,
-      env: { ...process.env, NODE_ENV: 'test' },
+      cwd: runDir,
+      env: buildChildEnv(runDir),
+      detached: true, // 独立进程组：超时可整组 kill，避免 vitest worker 孤儿
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     let out = '';
     child.stdout.on('data', (d) => (out += d.toString()));
     child.stderr.on('data', (d) => (out += d.toString()));
 
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      resolve({
-        success: false,
-        output: `Vitest 运行超时（${RUN_TIMEOUT / 1000}s，可能有用例陷入死循环）:\n${out.slice(-2000)}`,
-        passed: 0,
-        failed: 1,
-      });
-    }, RUN_TIMEOUT);
+    let killed = false;
+    const killGroup = () => {
+      killed = true;
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        /* 进程组可能已退出 */
+      }
+    };
 
-    child.on('exit', (code) => {
+    const timer = setTimeout(() => {
+      killGroup();
+      resolve(failResult(`Vitest 运行超时（${opts.timeoutMs / 1000}s，可能有用例陷入死循环）:\n${out.slice(-2000)}`));
+    }, opts.timeoutMs);
+
+    child.on('exit', () => {
       clearTimeout(timer);
-      const raw = extractJson(out);
-      if (benchmark) {
-        if (!raw) {
-          resolve({
-            success: false,
-            output: `无法从输出解析基准结果，Vitest 输出:\n${out.slice(-2000)}`,
-            passed: 0,
-            failed: 1,
-          });
-          return;
-        }
-        resolve(parseBenchJson(raw));
-        return;
-      }
-      const coverageData = coverage ? readCoverage() : undefined;
-      if (!raw) {
-        resolve({
-          success: false,
-          output: `无法从输出解析测试结果，Vitest 输出:\n${out.slice(-2000)}`,
-          passed: 0,
-          failed: 1,
-          coverage: coverageData,
-        });
-        return;
-      }
-      resolve(parseVitestJson(raw, code ?? 0, coverageData));
+      if (killed) return; // 超时分支已 resolve
+      const coverageData = opts.coverage ? readCoverage(runDir) : undefined;
+      resolve(finishRun(runDir, out, coverageData, opts.benchmark));
     });
 
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({
-        success: false,
-        output: `启动 Vitest 失败: ${err.message}\n（请确认项目已安装 vitest：npm install）`,
-        passed: 0,
-        failed: 1,
-      });
+      resolve(failResult(`启动 Vitest 失败: ${err.message}\n（请确认项目已安装 vitest：pnpm install）`));
     });
   });
+}
+
+/** 优先读取 --outputFile 写出的 result.json（免疫用户 stdout 打印干扰），失败回退 stdout 截取 */
+function finishRun(runDir: string, out: string, coverageData: CoverageSummary | undefined, benchmark: boolean): RunResult {
+  try {
+    const resultPath = path.join(runDir, 'result.json');
+    if (fs.existsSync(resultPath)) {
+      const raw = fs.readFileSync(resultPath, 'utf-8');
+      return benchmark ? parseBenchJson(raw) : parseVitestJson(raw, 0, coverageData);
+    }
+  } catch {
+    /* 回退到 stdout 解析 */
+  }
+  const raw = extractJson(out);
+  if (!raw) {
+    return { ...failResult(`无法从输出解析测试结果，Vitest 输出:\n${out.slice(-2000)}`), coverage: coverageData };
+  }
+  return benchmark ? parseBenchJson(raw) : parseVitestJson(raw, 0, coverageData);
 }
 
 /** 从 vitest --reporter=json 的 stdout 中提取 JSON 片段 */
@@ -349,7 +367,7 @@ export async function handleRunVitest(
       res.end(JSON.stringify({ success: false, output: '缺少 files 字段', passed: 0, failed: 1 }));
       return;
     }
-    const result = await runInSandbox(body.files, !!body.coverage, !!body.benchmark);
+    const result = await runInSandbox(body.files, { coverage: !!body.coverage, benchmark: !!body.benchmark });
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(result));
   } catch (e) {
