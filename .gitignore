@@ -20,3 +20,7 @@ yarn.lock
 
 # claude code local settings
 .claude/settings.local.json
+
+# local worktrees / SDD scratch space
+.worktrees
+.superpowers
