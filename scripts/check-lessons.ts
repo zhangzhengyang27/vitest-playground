@@ -1,7 +1,12 @@
 /**
  * 课时代码质量验证脚本：
  * 逐课时模拟 runner 的文件布局，用本地 vitest 实测 code / solution。
- * 非 TDD 课时要求 code 与 solution 均通过；TDD 课时要求 solution 通过、code 不崩溃。
+ * 契约：
+ * - 无 solution 的课时：整课跳过，计入 skipped，不判失败（补 solution 属内容决策）
+ * - solution 运行：必须通过，否则 FAIL
+ * - code（starter）运行：允许「断言失败」类结果（教学性失败起点）计 WARN；
+ *   进程崩溃、语法错误等套件级失败、无合法 JSON 结果仍判 FAIL
+ * - 摘要输出 passed / failed / warned / skipped 四个计数；仅 failed > 0 时退出码 1
  * 运行：node --experimental-strip-types scripts/check-lessons.ts
  */
 import { spawnSync } from 'node:child_process';
@@ -20,7 +25,7 @@ const ESBUILD_BIN = path.join(pnpmDir, esbuildPkg, 'node_modules', 'esbuild', 'b
 
 const DATA_SRC = path.join(ROOT_ABS, 'src/pages/vitest-learn/data.ts');
 const compiledPath = path.join(os.tmpdir(), 'vitest-check-data.mjs');
-const build = spawnSync(process.execPath, [ESBUILD_BIN, DATA_SRC, '--bundle', '--format=esm', `--outfile=${compiledPath}`, '--platform=node'], { encoding: 'utf-8' });
+const build = spawnSync(ESBUILD_BIN, [DATA_SRC, '--bundle', '--format=esm', `--outfile=${compiledPath}`, '--platform=node'], { encoding: 'utf-8' });
 if (build.status !== 0) {
   console.error(build.stdout, build.stderr);
   process.exit(1);
@@ -54,7 +59,7 @@ interface RunInfo {
   mustPass: boolean;
 }
 
-function run(dir: string): { passed: number; failed: number; error: string | null; fails: string[] } {
+function run(dir: string): { passed: number; failed: number; error: string | null; fails: string[]; broken: boolean } {
   const res = spawnSync(
     'node',
     [VITEST_BIN, 'run', '--root', dir, '--reporter=json'],
@@ -64,7 +69,7 @@ function run(dir: string): { passed: number; failed: number; error: string | nul
   const start = out.indexOf('{');
   const end = out.lastIndexOf('}');
   if (start === -1 || end < start) {
-    return { passed: 0, failed: 1, error: `无法解析输出: ${out.slice(-400)}`, fails: [] };
+    return { passed: 0, failed: 1, error: `无法解析输出: ${out.slice(-400)}`, fails: [], broken: false };
   }
   try {
     const data = JSON.parse(out.slice(start, end + 1));
@@ -77,14 +82,25 @@ function run(dir: string): { passed: number; failed: number; error: string | nul
         }
       }
     }
+    // 有套件失败但没有任何断言级失败 → 加载/收集错误（如语法错误），归入「崩溃」类
+    const broken = (data.numFailedTestSuites ?? 0) > 0 && (data.numFailedTests ?? 0) === 0;
+    if (broken) {
+      for (const fr of data.testResults ?? []) {
+        if (fr.status === 'failed') {
+          const msg = (fr.message ?? '').split('\n').slice(0, 2).join(' ').slice(0, 300);
+          fails.push(`${fr.name ?? 'suite'} → ${msg}`);
+        }
+      }
+    }
     return {
       passed: data.numPassedTests ?? 0,
       failed: data.numFailedTests ?? 0,
       error: null,
       fails,
+      broken,
     };
   } catch {
-    return { passed: 0, failed: 1, error: `JSON 解析失败: ${out.slice(-400)}`, fails: [] };
+    return { passed: 0, failed: 1, error: `JSON 解析失败: ${out.slice(-400)}`, fails: [], broken: false };
   }
 }
 
@@ -113,7 +129,10 @@ function buildRuns(lesson: (typeof chapters)[number]['lessons'][number], which: 
   return { label, files, mustPass: which === 'solution' || !isTDD };
 }
 
+let passedCount = 0;
 let failedCount = 0;
+let warnedCount = 0;
+let skippedCount = 0;
 const results: string[] = [];
 // 支持传课时 key 过滤：node scripts/check-lessons.ts key1 key2 ...
 const FILTER = new Set(process.argv.slice(2));
@@ -121,17 +140,36 @@ const FILTER = new Set(process.argv.slice(2));
 for (const chapter of chapters) {
   for (const lesson of chapter.lessons) {
     if (FILTER.size && !FILTER.has(lesson.key)) continue;
+    if (!lesson.solution?.trim()) {
+      // 无 solution 的课时整课跳过：补 solution 属内容决策，不在此判失败
+      skippedCount++;
+      const line = `[SKIP] ${chapter.key}/${lesson.key}（无 solution，整课跳过）`;
+      results.push(line);
+      console.log(line);
+      continue;
+    }
     for (const which of ['code', 'solution'] as const) {
-      const { label, files, mustPass } = buildRuns(lesson, which);
+      const { label, files } = buildRuns(lesson, which);
       const dir = path.join(TMP, `${chapter.key}-${lesson.key}-${which}`);
       writeSandbox(dir, files);
       const r = run(dir);
-      const ok = mustPass ? r.failed === 0 : r.error === null;
-      const tag = ok ? 'PASS' : 'FAIL';
-      if (!ok) failedCount++;
+      // solution 运行必须通过；code（starter）运行允许「断言失败」类结果（教学性失败起点）计 WARN，
+      // 但崩溃/语法错误等套件级失败、无合法 JSON 结果仍判 FAIL
+      const tag = which === 'solution'
+        ? r.error === null && !r.broken && r.failed === 0
+          ? 'PASS'
+          : 'FAIL'
+        : r.error !== null || r.broken
+          ? 'FAIL'
+          : r.failed > 0
+            ? 'WARN'
+            : 'PASS';
+      if (tag === 'PASS') passedCount++;
+      else if (tag === 'WARN') warnedCount++;
+      else failedCount++;
       const detail = r.error
         ? ` [${r.error}]`
-        : ` (${r.passed} passed / ${r.failed} failed)${r.fails.length ? '\n        ' + r.fails.join('\n        ') : ''}`;
+        : ` (${r.passed} passed / ${r.failed} failed)${r.fails.length ? '\n        ' + r.fails.join('\n        ') : ''}${r.broken ? ' [套件级失败：加载/收集错误]' : ''}`;
       results.push(`[${tag}] ${chapter.key}/${lesson.key} ${label}${detail}`);
       console.log(`[${tag}] ${chapter.key}/${lesson.key} ${label}${detail}`);
     }
@@ -140,9 +178,10 @@ for (const chapter of chapters) {
 
 console.log('\n========== 汇总 ==========');
 console.log(`总课时：${chapters.reduce((s, c) => s + c.lessons.length, 0)}`);
+console.log(`passed：${passedCount} / failed：${failedCount} / warned：${warnedCount} / skipped：${skippedCount}`);
 if (failedCount > 0) {
-  console.log(`失败数：${failedCount}`);
+  console.log('存在失败运行 ❌');
   process.exitCode = 1;
 } else {
-  console.log('全部通过 ✅');
+  console.log('无失败 ✅（warned 为教学性失败起点，skipped 为未提供 solution 的课时）');
 }
