@@ -104,3 +104,67 @@ describe('buildChildEnv（最小环境变量白名单）', () => {
     }
   });
 });
+
+import { PassThrough } from 'node:stream';
+import { createRunLimiter, handleRunVitest } from '../vitestServerRunner';
+
+describe('createRunLimiter（并发信号量）', () => {
+  it('满载排队，队列满拒绝，释放后排队者获得槽位', async () => {
+    const limiter = createRunLimiter(2, 1);
+    await limiter.acquire();
+    await limiter.acquire();
+    const queued = limiter.acquire();
+    await expect(limiter.acquire()).rejects.toThrow('RUNNER_BUSY');
+    limiter.release();
+    await queued;
+    limiter.release();
+    limiter.release();
+  });
+});
+
+function postRequest(body: unknown) {
+  const req = new PassThrough() as unknown as import('node:http').IncomingMessage;
+  (req as any).method = 'POST';
+  (req as any).end(JSON.stringify(body));
+  return req;
+}
+
+function collectRes() {
+  const chunks: Buffer[] = [];
+  const res = new PassThrough() as unknown as import('node:http').ServerResponse;
+  (res as any).statusCode = 200;
+  // PassThrough 没有 setHeader（ServerResponse 才有），测试替身需补齐该接口
+  (res as any).setHeader = () => {};
+  const done = new Promise<{ statusCode: number; body: string }>((resolve) => {
+    (res as any).on('data', (c: Buffer) => chunks.push(c));
+    (res as any).on('end', () => resolve({ statusCode: (res as any).statusCode, body: Buffer.concat(chunks).toString() }));
+  });
+  return { res, done };
+}
+
+describe('handleRunVitest（API 层快速失败）', () => {
+  it('路径穿越文件名返回 400，不触发运行', { timeout: 15_000 }, async () => {
+    const { res, done } = collectRes();
+    await handleRunVitest(postRequest({ files: { '../evil.ts': 'x' } }), res);
+    const { statusCode, body } = await done;
+    expect(statusCode).toBe(400);
+    expect(body).toContain('非法文件名');
+  });
+
+  it('files 缺失或为数组返回 400', { timeout: 15_000 }, async () => {
+    for (const body of [{}, { files: ['a.ts'] }]) {
+      const { res, done } = collectRes();
+      await handleRunVitest(postRequest(body), res);
+      const { statusCode } = await done;
+      expect(statusCode).toBe(400);
+    }
+  });
+
+  it('合法请求返回 200 与结构化结果', { timeout: 30_000 }, async () => {
+    const { res, done } = collectRes();
+    await handleRunVitest(postRequest({ files: { 'lesson.spec.ts': `import { it, expect } from 'vitest';\nit('ok', () => expect(1).toBe(1));\n` } }), res);
+    const { statusCode, body } = await done;
+    expect(statusCode).toBe(200);
+    expect(JSON.parse(body).success).toBe(true);
+  });
+});

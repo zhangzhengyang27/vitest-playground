@@ -275,6 +275,33 @@ export async function runInSandbox(
   }
 }
 
+/** 并发上限与排队上限：公网止血核心参数，宁可拒绝不可拖垮宿主机 */
+const MAX_CONCURRENT_RUNS = 2;
+const MAX_QUEUE = 8;
+
+export function createRunLimiter(maxConcurrent: number, maxQueue: number) {
+  let active = 0;
+  const waiters: Array<() => void> = [];
+  return {
+    async acquire(): Promise<void> {
+      if (active < maxConcurrent) {
+        active++;
+        return;
+      }
+      if (waiters.length >= maxQueue) throw new Error('RUNNER_BUSY');
+      await new Promise<void>((r) => waiters.push(r));
+      active++;
+    },
+    release(): void {
+      active = Math.max(0, active - 1);
+      const next = waiters.shift();
+      if (next) next();
+    },
+  };
+}
+
+const limiter = createRunLimiter(MAX_CONCURRENT_RUNS, MAX_QUEUE);
+
 function spawnVitest(
   runDir: string,
   opts: { coverage: boolean; benchmark: boolean; timeoutMs: number },
@@ -350,30 +377,55 @@ function extractJson(text: string): string {
   return text.slice(start, end + 1);
 }
 
+function sendJson(res: ServerResponse, statusCode: number, payload: RunResult) {
+  res.statusCode = statusCode;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(payload));
+}
+
 /** Vite 中间件处理函数 */
-export async function handleRunVitest(
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> {
+export async function handleRunVitest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.statusCode = 405;
     res.end('Method Not Allowed');
     return;
   }
+
+  let body: RunBody;
   try {
-    const body = await readBody(req);
-    if (!body.files || typeof body.files !== 'object') {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ success: false, output: '缺少 files 字段', passed: 0, failed: 1 }));
-      return;
-    }
-    const result = await runInSandbox(body.files, { coverage: !!body.coverage, benchmark: !!body.benchmark });
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(result));
+    body = await readBody(req);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: false, output: `服务端错误: ${msg}`, passed: 0, failed: 1 }));
+    sendJson(res, 400, failResult(`请求无效: ${msg}`));
+    return;
+  }
+  if (!body.files || typeof body.files !== 'object' || Array.isArray(body.files)) {
+    sendJson(res, 400, failResult('缺少 files 字段'));
+    return;
+  }
+  try {
+    for (const name of Object.keys(body.files)) sanitizeEntryName(name);
+  } catch (e) {
+    sendJson(res, 400, failResult(e instanceof Error ? e.message : String(e)));
+    return;
+  }
+
+  try {
+    await limiter.acquire();
+  } catch {
+    sendJson(res, 429, failResult('运行排队已满，请稍后再试'));
+    return;
+  }
+  try {
+    const result = await runInSandbox(body.files, {
+      coverage: !!body.coverage,
+      benchmark: !!body.benchmark,
+    });
+    sendJson(res, 200, result);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    sendJson(res, 500, failResult(`服务端错误: ${msg}`));
+  } finally {
+    limiter.release();
   }
 }
