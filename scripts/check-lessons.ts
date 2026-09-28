@@ -164,13 +164,17 @@ for (const chapter of chapters) {
       // 无 solution 的课时：不实测运行，但过语法门禁——抓转义/抄录损坏
       // （历史真实缺陷形态：模板字符串少闭合导致整段答案损坏）
       const loader = lesson.environment === 'jsdom' ? 'tsx' : 'ts';
+      // extraFiles 只 transform TS/TSX；其他类型（未来可能的 .json/.css 等）没有语法门禁意义，跳过
+      const extraLoaders = Object.entries(lesson.extraFiles ?? {}).map(([n, c]): [string, string, 'ts' | 'tsx' | null] => [
+        n,
+        c,
+        n.endsWith('.tsx') ? 'tsx' : /\.(ts|mts|cts)$/.test(n) ? 'ts' : null,
+      ]);
       const sources: Array<[string, string, 'ts' | 'tsx']> = [
         ['code', lesson.code, loader],
         ...(lesson.grader ? [['grader', lesson.grader, loader] as [string, string, 'ts' | 'tsx']] : []),
         ...(lesson.hiddenGrader ? [['hiddenGrader', lesson.hiddenGrader, loader] as [string, string, 'ts' | 'tsx']] : []),
-        ...Object.entries(lesson.extraFiles ?? {}).map(
-          ([n, c]) => [n, c, n.endsWith('.tsx') ? 'tsx' : 'ts'] as [string, string, 'ts' | 'tsx'],
-        ),
+        ...extraLoaders.filter((e): e is [string, string, 'ts' | 'tsx'] => e[2] !== null),
       ];
       const bad = sources
         .map(([label, src, ld]) => ({ label, err: checkSyntax(src, ld) }))

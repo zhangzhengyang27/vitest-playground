@@ -23,7 +23,7 @@ server {
         limit_req zone=vitest_run burst=3 nodelay;
         limit_req_status 429;
         proxy_pass http://127.0.0.1:8000;
-        proxy_read_timeout 600s;  # 运行器 60s 超时 × 8 深排队最长约 480s，600s 留缓冲避免排队深处被 504
+        proxy_read_timeout 600s;  # 运行器 60s 超时；2 并发消化 8 深排队最坏约 300s（4 轮等待 + 自身），600s 留缓冲避免 504
     }
 
     location / {

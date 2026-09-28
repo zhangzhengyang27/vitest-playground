@@ -174,7 +174,7 @@ const LessonPage: React.FC = () => {
           failed: 1,
         });
       });
-  }, [code, showSolution, currentLesson, isTDD, runCode, chapterKey, effectiveLessonKey]);
+  }, [code, showSolution, currentLesson, runCode, chapterKey, effectiveLessonKey]);
 
   // 自动重跑（watch 体验替代）：代码停止输入 1.2s 后自动运行
   const handleRunTestRef = useRef(handleRunTest);

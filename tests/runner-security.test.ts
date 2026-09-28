@@ -236,6 +236,11 @@ describe('buildLessonFiles（服务端装配）', () => {
     expect(files).toEqual({ 'lesson.ts': 'U', 'lesson.spec.ts': 'G' });
   });
 
+  it('纯空白的 grader/hiddenGrader 视为不存在（与旧前端 trim 守卫等价）', () => {
+    const files = buildLessonFiles(fakeLesson({ grader: '   ', hiddenGrader: '  ' }), 'U');
+    expect(files).toEqual({ 'lesson.spec.ts': 'U' });
+  });
+
   it('普通模式：userCode→spec；hiddenGrader→hidden', () => {
     const files = buildLessonFiles(fakeLesson({ hiddenGrader: 'H' }), 'U');
     expect(files).toEqual({ 'lesson.spec.ts': 'U', 'lesson.hidden.spec.ts': 'H' });
@@ -343,5 +348,16 @@ describe('bench 课时全链路', () => {
     const parsed = JSON.parse(body);
     expect(parsed.success).toBe(true);
     expect(parsed.tests?.length).toBeGreaterThan(0);
+  });
+
+  it('bench 用例抛错时结果不标成功（失败时默认 reporter 不打印表格，解析 0 行）', { timeout: 60_000 }, async () => {
+    const result = await runInSandbox(
+      {
+        'lesson.spec.ts': `import { bench, describe } from 'vitest';\ndescribe('bad', () => {\n  bench('会抛错', () => { throw new Error('boom'); });\n  bench('正常', () => { 1 + 1; });\n});\n`,
+      },
+      { benchmark: true },
+    );
+    expect(result.success).toBe(false);
+    expect(result.passed).toBe(0);
   });
 });

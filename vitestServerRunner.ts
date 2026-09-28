@@ -74,13 +74,14 @@ export function buildLessonFiles(lesson: Lesson, userCode: string): Record<strin
   const ext = isJsdom ? 'tsx' : 'ts';
   const pragma = isJsdom ? '// @vitest-environment happy-dom\n\n' : '';
   const files: Record<string, string> = {};
-  if (lesson.grader) {
+  // 与旧前端 trim 守卫等价：纯空白的 grader/hiddenGrader 视为不存在
+  if (lesson.grader?.trim()) {
     files[`lesson.${ext}`] = userCode;
     files[`lesson.spec.${ext}`] = pragma + lesson.grader;
-    if (lesson.hiddenGrader) files[`lesson.hidden.spec.${ext}`] = pragma + lesson.hiddenGrader;
+    if (lesson.hiddenGrader?.trim()) files[`lesson.hidden.spec.${ext}`] = pragma + lesson.hiddenGrader;
   } else {
     files[`lesson.spec.${ext}`] = pragma + userCode;
-    if (lesson.hiddenGrader) files[`lesson.hidden.spec.${ext}`] = pragma + lesson.hiddenGrader;
+    if (lesson.hiddenGrader?.trim()) files[`lesson.hidden.spec.${ext}`] = pragma + lesson.hiddenGrader;
   }
   if (lesson.extraFiles) Object.assign(files, lesson.extraFiles);
   return files;
