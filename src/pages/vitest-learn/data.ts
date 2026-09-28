@@ -1929,6 +1929,24 @@ test.only('只运行我（其余被忽略）', () => {
   expect('vitest'.length).toBe(6);
 });
 `,
+        solution: `// 参考答案：skip / todo / only 的规范用法
+test('正常用例', () => {
+  expect(1 + 1).toBe(2);
+});
+
+// skip：暂时排除，不计失败；条件跳过可用 test.skipIf(条件)
+test.skip('尚未实现的用例', () => {
+  expect(1).toBe(2); // 即使断言失败也不会让套件变红
+});
+
+// todo：占位待补，报告中单独列出
+test.todo('补充边界情况测试');
+
+// only 只用于本地调试，提交前务必移除（它会让其余用例全部不执行）
+test('命名与筛选', () => {
+  expect('vitest'.length).toBe(6);
+});
+`,
         tips: [
           'test.only 会忽略同文件其他用例，调试时很有用，提交前记得去掉',
           'test.skip 与 test.todo 都不会让套件失败',
@@ -1958,6 +1976,34 @@ test.concurrent('任务 C', async () => {
   expect([1, 2, 3]).toHaveLength(3);
 });
 `,
+        solution: `// 参考答案：三个用例并行执行，总耗时约为最慢一个，而非三者之和
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+test.concurrent('任务 A', async () => {
+  await delay(20);
+  expect(1 + 1).toBe(2);
+});
+
+test.concurrent('任务 B', async () => {
+  await delay(20);
+  expect('ab'.length).toBe(2);
+});
+
+test.concurrent('任务 C', async () => {
+  await delay(20);
+  expect([1, 2, 3]).toHaveLength(3);
+});
+
+// 并发用例必须互相独立：每个用例自建数据，不引用共享的可变外部状态
+test.concurrent('独立状态', async () => {
+  const local = [1, 2, 3];
+  await delay(10);
+  local.push(4);
+  expect(local).toHaveLength(4);
+});
+`,
         tips: [
           '并发用例共享状态会互相干扰，务必保持独立',
           '并发能显著缩短大量异步用例的总耗时',
@@ -1974,6 +2020,22 @@ test.concurrent('任务 C', async () => {
     throw new Error('网络抖动');
   }
   expect(true).toBe(true);
+});
+
+test('稳定用例', () => {
+  expect(Math.max(1, 2, 3)).toBe(3);
+});
+`,
+        solution: `// 参考答案：用计数器确定性地模拟 flaky（不依赖随机数）
+// 第一次执行失败，retry 自动重试后第二次通过
+let attempts = 0;
+
+test('偶发失败，自动重试', { retry: 3 }, () => {
+  attempts += 1;
+  if (attempts === 1) {
+    throw new Error('网络抖动');
+  }
+  expect(attempts).toBe(2);
 });
 
 test('稳定用例', () => {
@@ -2022,6 +2084,39 @@ test('稳定用例', () => {
   });
 });
 `,
+        solution: `// 参考答案：嵌套 describe + 分层钩子
+// 执行顺序：外层 beforeEach -> 内层 beforeEach -> 用例
+describe('购物车', () => {
+  let cart: string[];
+
+  beforeEach(() => {
+    cart = []; // 每个用例都从空购物车开始
+  });
+
+  describe('添加商品', () => {
+    beforeEach(() => {
+      cart.push('apple'); // 在外层基础上追加
+    });
+
+    test('初始已有一个苹果', () => {
+      expect(cart).toEqual(['apple']);
+    });
+
+    test('可继续追加', () => {
+      cart.push('banana');
+      expect(cart).toEqual(['apple', 'banana']);
+    });
+  });
+
+  describe('清空', () => {
+    test('重置后为空', () => {
+      cart.push('apple');
+      cart = [];
+      expect(cart).toHaveLength(0);
+    });
+  });
+});
+`,
         tips: [
           'beforeEach 保证每个用例拿到干净状态',
           '嵌套 describe 让报告层级清晰',
@@ -2053,6 +2148,39 @@ test('控制时间流逝', () => {
   vi.useRealTimers(); // 用完恢复真实时间
 });
 `,
+        solution: `// 参考答案：Once 队列 + 默认实现回落，fake timers 统一恢复
+import { vi, afterEach } from 'vitest';
+
+test('依次返回不同值', () => {
+  const fn = vi.fn(() => '默认');
+  fn.mockImplementationOnce(() => 1).mockImplementationOnce(() => 2);
+
+  expect(fn()).toBe(1);
+  expect(fn()).toBe(2);
+  expect(fn()).toBe('默认'); // Once 用尽后回落到默认实现
+});
+
+// 在 afterEach 统一恢复，比每个用例手写 useRealTimers 更稳
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+test('控制时间流逝', () => {
+  vi.useFakeTimers();
+  const start = Date.now();
+  vi.advanceTimersByTime(1500);
+  expect(Date.now() - start).toBe(1500);
+});
+
+test('fake timers 下定时器不会真的等待', () => {
+  vi.useFakeTimers();
+  const fired: number[] = [];
+  setTimeout(() => fired.push(1), 10_000);
+  vi.advanceTimersByTime(10_000);
+  expect(fired).toEqual([1]);
+});
+`,
         tips: [
           'mockImplementationOnce 用尽后回落到默认实现',
           'useFakeTimers 后定时器不会真的等待，用 advanceTimersByTime 推进',
@@ -2079,6 +2207,31 @@ describe('sum 性能', () => {
 
   bench('累加 100000', () => {
     sum(100000);
+  });
+});
+`,
+        solution: `// 参考答案：bench 更适合做「实现方案对比」——同一语义，两种写法
+import { bench, describe } from 'vitest';
+
+// 循环累加：O(n)
+function sumLoop(n: number) {
+  let s = 0;
+  for (let i = 1; i <= n; i++) s += i;
+  return s;
+}
+
+// 高斯公式：O(1)
+function sumFormula(n: number) {
+  return (n * (n + 1)) / 2;
+}
+
+describe('求和性能对比', () => {
+  bench('循环累加 100000', () => {
+    sumLoop(100000);
+  });
+
+  bench('公式 100000', () => {
+    sumFormula(100000);
   });
 });
 `,
@@ -4605,6 +4758,24 @@ describe('Mirror 隐藏校验', () => {
   return '';
 }
 `,
+        solution: `// 「值-符号」映射表（含减法组合），从大到小贪心取用
+const ROMAN_TABLE: Array<[number, string]> = [
+  [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+  [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+  [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+];
+
+export function toRoman(n: number): string {
+  let result = '';
+  for (const [value, symbol] of ROMAN_TABLE) {
+    while (n >= value) {
+      result += symbol;
+      n -= value;
+    }
+  }
+  return result;
+}
+`,
         grader: `import { toRoman } from './lesson';
 
 describe('toRoman', () => {
@@ -4664,6 +4835,23 @@ describe('toRoman 隐藏校验', () => {
         code: `export function isValid(s: string): boolean {
   // TODO: 用栈判断括号是否匹配
   return false;
+}
+`,
+        solution: `// 右括号 -> 对应左括号的映射
+const PAIRS: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+
+export function isValid(s: string): boolean {
+  const stack: string[] = [];
+  for (const ch of s) {
+    if (ch === '(' || ch === '[' || ch === '{') {
+      stack.push(ch);
+    } else if (ch in PAIRS) {
+      // 右括号必须与栈顶左括号配对，否则无效
+      if (stack.pop() !== PAIRS[ch]) return false;
+    }
+  }
+  // 全部匹配完后栈应为空（否则有未闭合的左括号）
+  return stack.length === 0;
 }
 `,
         grader: `import { isValid } from './lesson';

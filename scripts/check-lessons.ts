@@ -49,7 +49,7 @@ function checkSyntax(source: string, loader: 'ts' | 'tsx'): string | null {
   return (res.stderr ?? '').split('\n')[0].slice(0, 300) || 'esbuild transform 失败';
 }
 
-function writeSandbox(dir: string, files: Record<string, string>) {
+function writeSandbox(dir: string, files: Record<string, string>, benchmark = false) {
   fs.mkdirSync(dir, { recursive: true });
   // 与产品沙箱（.vitest-runs/run-<rand>，位于仓库内）对齐：把仓库 node_modules 链接进沙箱，
   // 使 react / @testing-library 等裸导入可解析（os.tmpdir() 父链上没有 node_modules）。
@@ -59,7 +59,7 @@ function writeSandbox(dir: string, files: Record<string, string>) {
   fs.writeFileSync(
     path.join(dir, 'vitest.config.mjs'),
     `export default {
-  test: { globals: true, environment: 'node', include: ['*.spec.ts', '*.spec.tsx'] },
+  test: { globals: true, environment: 'node', include: ['*.spec.ts', '*.spec.tsx']${benchmark ? ", benchmark: { include: ['*.spec.ts', '*.spec.tsx'] }" : ''} },
   esbuild: { jsx: 'automatic' },
   cacheDir: '.vite-cache',
 };
@@ -78,7 +78,24 @@ interface RunInfo {
   mustPass: boolean;
 }
 
-function run(dir: string): { passed: number; failed: number; error: string | null; fails: string[]; broken: boolean } {
+type RunStats = { passed: number; failed: number; error: string | null; fails: string[]; broken: boolean };
+
+function run(dir: string, benchmark = false): RunStats {
+  // benchmark 课时与产品一致用 vitest bench（默认 reporter，无内置 json 可用）
+  if (benchmark) {
+    const benchRes = spawnSync('node', [VITEST_BIN, 'bench', '--root', dir], {
+      cwd: dir,
+      timeout: 120_000,
+      encoding: 'utf-8',
+    });
+    const benchOut = `${benchRes.stdout ?? ''}\n${benchRes.stderr ?? ''}`.replace(/\x1B\[[0-9;]*[A-Za-z]/g, '');
+    const rowRe = /^\s*[·✓×]\s+(.+?)\s{2,}([\d,.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/;
+    const rows = benchOut.split('\n').filter((l) => rowRe.test(l));
+    if (rows.length === 0) {
+      return { passed: 0, failed: 1, error: `无基准结果行: ${benchOut.slice(-300)}`, fails: [], broken: false };
+    }
+    return { passed: rows.length, failed: 0, error: null, fails: [], broken: false };
+  }
   const res = spawnSync(
     'node',
     [VITEST_BIN, 'run', '--root', dir, '--reporter=json'],
@@ -197,8 +214,9 @@ for (const chapter of chapters) {
     for (const which of ['code', 'solution'] as const) {
       const { label, files } = buildRuns(lesson, which);
       const dir = path.join(TMP, `${chapter.key}-${lesson.key}-${which}`);
-      writeSandbox(dir, files);
-      const r = run(dir);
+      const bench = !!lesson.benchmark;
+      writeSandbox(dir, files, bench);
+      const r = run(dir, bench);
       // solution 运行必须通过；code（starter）运行允许「断言失败」类结果（教学性失败起点）计 WARN，
       // 但崩溃/语法错误等套件级失败、无合法 JSON 结果仍判 FAIL
       const tag = which === 'solution'
