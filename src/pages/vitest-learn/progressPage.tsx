@@ -4,28 +4,32 @@
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Progress, Tag, message } from 'antd';
+import { Button, Progress, message } from 'antd';
 import {
   TrophyOutlined,
   ReloadOutlined,
   DownloadOutlined,
-  CheckCircleTwoTone,
+  StarOutlined,
+  FireOutlined,
+  RocketOutlined,
+  CrownOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/AppLayout';
 import { chapters } from './data';
-import { isLessonPassed, clearProgress } from './progress';
+import { isLessonPassed, clearProgress, computeBadges, type Badge } from './progress';
 import { usePageMeta } from '../../usePageMeta';
 import styles from './welcome.module.css';
 
 const PROGRESS_KEY = 'vitest-playground-progress-v1';
 
-const BADGES = [
-  { id: 'first', name: '初次通关', desc: '完成首个课时' },
-  { id: 'ten', name: '小有成效', desc: '完成 10 个课时' },
-  { id: 'half', name: '渐入佳境', desc: '完成过半课时' },
-  { id: 'chapter', name: '整章攻克', desc: '完整通关任意一章' },
-  { id: 'master', name: '测试大师', desc: '通关全部课时' },
-];
+const BADGE_ICONS: Record<Badge['icon'], typeof StarOutlined> = {
+  medal: StarOutlined,
+  fire: FireOutlined,
+  rocket: RocketOutlined,
+  crown: CrownOutlined,
+  trophy: TrophyOutlined,
+};
 
 const ProgressPage: React.FC = () => {
   const navigate = useNavigate();
@@ -50,19 +54,13 @@ const ProgressPage: React.FC = () => {
     });
     const total = perChapter.reduce((s, c) => s + c.total, 0);
     const passed = perChapter.reduce((s, c) => s + c.done, 0);
-    const badges = BADGES.map((b) => ({
-      ...b,
-      ok:
-        b.id === 'first'
-          ? passed >= 1
-          : b.id === 'ten'
-            ? passed >= 10
-            : b.id === 'half'
-              ? passed >= Math.ceil(total / 2)
-              : b.id === 'chapter'
-                ? perChapter.some((c) => c.allDone)
-                : passed >= total && total > 0,
-    }));
+    const chaptersCompleted = perChapter.filter((c) => c.allDone).length;
+    const badges = computeBadges({
+      chaptersTotal: chapters.length,
+      chaptersCompleted,
+      lessonsTotal: total,
+      lessonsPassed: passed,
+    });
     return { total, passed, perChapter, badges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
@@ -114,28 +112,37 @@ const ProgressPage: React.FC = () => {
 
         {/* 成就徽章 */}
         <h3 style={{ margin: '28px 0 12px' }}>成就徽章</h3>
-        <div className={styles.featureGrid}>
-          {badges.map((b) => (
-            <div
-              key={b.id}
-              className={styles.featureCard}
-              style={{
-                opacity: b.ok ? 1 : 0.55,
-                borderColor: b.ok ? '#7c3aed' : undefined,
-              }}
-            >
-              <span className={styles.featureIcon} style={{ color: b.ok ? '#7c3aed' : '#94a3b8' }}>
+        <div className={styles.badgeGrid}>
+          {badges.map((b) => {
+            const IconComp = BADGE_ICONS[b.icon];
+            return (
+              <div
+                key={b.id}
+                className={`${styles.badgeCard} ${b.ok ? styles.badgeCardEarned : styles.badgeCardLocked}`}
+              >
+                {b.ok && <span className={styles.badgeRibbon}>已获得</span>}
+                <span className={`${styles.medal} ${b.ok ? styles.medalEarned : styles.medalLocked}`}>
+                  {b.ok ? <IconComp /> : <LockOutlined />}
+                </span>
+                <h3 className={styles.badgeName}>{b.name}</h3>
+                <p className={styles.badgeDesc}>{b.desc}</p>
                 {b.ok ? (
-                  <CheckCircleTwoTone twoToneColor="#7c3aed" />
+                  <span className={styles.badgeStateOk}>✓ 已获得</span>
                 ) : (
-                  <TrophyOutlined />
+                  <div className={styles.badgeProgress}>
+                    <Progress
+                      percent={b.goal ? Math.round((b.current / b.goal) * 100) : 0}
+                      size="small"
+                      showInfo={false}
+                      strokeColor="#94a3b8"
+                      className={styles.badgeProgressBar}
+                    />
+                    <span className={styles.badgeProgressText}>{b.hint ?? `${b.current}/${b.goal}`}</span>
+                  </div>
                 )}
-              </span>
-              <h3 className={styles.featureTitle}>{b.name}</h3>
-              <p className={styles.featureDesc}>{b.desc}</p>
-              <Tag color={b.ok ? 'success' : 'default'}>{b.ok ? '已获得' : '未解锁'}</Tag>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
 
         {/* 分章进度 */}
