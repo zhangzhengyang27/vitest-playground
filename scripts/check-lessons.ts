@@ -18,6 +18,10 @@ import path from 'node:path';
 
 // 用 esbuild 编译 data.ts（Node strip-types 无法处理嵌套模板字符串）
 const ROOT_ABS = process.cwd();
+// 与产品运行器保持一致：子进程不继承 CI 标记（产品 env 白名单不含 CI）。
+// 否则 CI 上 vitest 进入 CI 模式：.only 被直接拒绝、缺失快照不创建而是判失败，
+// 会让 skip-only 与 snapshot 课时出现本地没有的假失败。
+const { CI: _ci, GITHUB_ACTIONS: _ga, ...childEnv } = process.env;
 const pnpmDir = path.join(ROOT_ABS, 'node_modules', '.pnpm');
 const esbuildPkg = fs
   .readdirSync(pnpmDir)
@@ -87,6 +91,7 @@ function run(dir: string, benchmark = false): RunStats {
       cwd: dir,
       timeout: 120_000,
       encoding: 'utf-8',
+      env: childEnv,
     });
     const benchOut = `${benchRes.stdout ?? ''}\n${benchRes.stderr ?? ''}`.replace(/\x1B\[[0-9;]*[A-Za-z]/g, '');
     const rowRe = /^\s*[·✓×]\s+(.+?)\s{2,}([\d,.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/;
@@ -99,7 +104,7 @@ function run(dir: string, benchmark = false): RunStats {
   const res = spawnSync(
     'node',
     [VITEST_BIN, 'run', '--root', dir, '--reporter=json'],
-    { cwd: dir, timeout: 30_000, encoding: 'utf-8' },
+    { cwd: dir, timeout: 30_000, encoding: 'utf-8', env: childEnv },
   );
   const out = `${res.stdout ?? ''}\n${res.stderr ?? ''}`;
   const start = out.indexOf('{');
