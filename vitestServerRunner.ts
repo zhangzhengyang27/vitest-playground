@@ -449,6 +449,8 @@ export async function handleRunVitest(req: IncomingMessage, res: ServerResponse)
     return;
   }
   if (
+    !body ||
+    typeof body !== 'object' ||
     typeof body.chapterKey !== 'string' ||
     typeof body.lessonKey !== 'string' ||
     typeof body.code !== 'string'

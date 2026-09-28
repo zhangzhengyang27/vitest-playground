@@ -154,6 +154,18 @@ describe('handleRunVitest（API 层快速失败）', () => {
       expect(statusCode).toBe(400);
     }
   });
+
+  it('JSON null / 数组 body 返回 400 而非 500', { timeout: 15_000 }, async () => {
+    for (const raw of ['null', '[]']) {
+      const req = new PassThrough() as unknown as import('node:http').IncomingMessage;
+      (req as any).method = 'POST';
+      (req as any).end(raw);
+      const { res, done } = collectRes();
+      await handleRunVitest(req, res);
+      const { statusCode } = await done;
+      expect(statusCode).toBe(400);
+    }
+  });
 });
 
 describe('最终审查修复波（内存 DoS 加固）', () => {
