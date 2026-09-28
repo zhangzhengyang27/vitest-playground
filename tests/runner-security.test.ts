@@ -5,6 +5,7 @@ import { sanitizeEntryName } from '../vitestServerRunner';
 import { RUNS_ROOT, buildChildEnv, runInSandbox } from '../vitestServerRunner';
 import type { Lesson } from '../src/pages/vitest-learn/data';
 import { buildLessonFiles, findLesson, resolveRunOptions } from '../vitestServerRunner';
+import { parseBenchTable } from '../vitestServerRunner';
 
 describe('sanitizeEntryName（沙箱文件名白名单）', () => {
   it('放行合法课时文件名', () => {
@@ -278,5 +279,57 @@ describe('handleRunVitest 新契约', () => {
     const { statusCode, body } = await done;
     expect(statusCode).toBe(200);
     expect(JSON.parse(body).success).toBe(true);
+  });
+});
+
+describe('parseBenchTable（bench 默认表格解析）', () => {
+  const SAMPLE = `
+ ✓ lesson.spec.ts > sum 性能 1770ms
+     name                 hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · 累加 1000    1,117,900.18  0.0008  0.1765  0.0009  0.0009  0.0012  0.0013  0.0017  ±0.14%   558951
+   · 累加 100000      7,505.62  0.1216  0.3707  0.1332  0.1368  0.1587  0.1739  0.2052  ±0.21%     3753
+
+ BENCH  Summary
+
+  累加 1000 - lesson.spec.ts > sum 性能
+    148.94x faster than 累加 100000
+`;
+
+  it('解析 name / hz / mean 并忽略 Summary 段', () => {
+    const result = parseBenchTable(SAMPLE);
+    expect(result.success).toBe(true);
+    expect(result.passed).toBe(2);
+    expect(result.tests?.[0]).toMatchObject({ name: '累加 1000', status: 'passed', duration: 0.0009 });
+    expect(result.tests?.[1]).toMatchObject({ name: '累加 100000', status: 'passed', duration: 0.1332 });
+  });
+
+  it('剥离 ANSI 颜色码后解析（真实运行器输出带色）', () => {
+    const ansi = SAMPLE.replace(/· /g, '\x1b[32m·\x1b[39m ').replace(/name /, '\x1b[1mname    \x1b[22m');
+    const result = parseBenchTable(ansi);
+    expect(result.success).toBe(true);
+    expect(result.passed).toBe(2);
+    expect(result.tests?.[0]?.name).toBe('累加 1000');
+  });
+
+  it('无表格行时返回失败', () => {
+    const result = parseBenchTable('No benchmark files found, exiting with code 1');
+    expect(result.success).toBe(false);
+    expect(result.output).toContain('无法从输出解析基准结果');
+  });
+});
+
+describe('bench 课时全链路', () => {
+  it('coverage-advanced/benchmark 经新契约成功运行', { timeout: 60_000 }, async () => {
+    const { res, done } = collectRes();
+    const lesson = findLesson('coverage-advanced', 'benchmark')!;
+    await handleRunVitest(
+      postRequest({ chapterKey: 'coverage-advanced', lessonKey: 'benchmark', code: lesson.code }),
+      res,
+    );
+    const { statusCode, body } = await done;
+    expect(statusCode).toBe(200);
+    const parsed = JSON.parse(body);
+    expect(parsed.success).toBe(true);
+    expect(parsed.tests?.length).toBeGreaterThan(0);
   });
 });

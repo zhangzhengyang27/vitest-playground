@@ -106,7 +106,7 @@ export function buildChildEnv(homeDir: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function writeRunConfig(runDir: string, coverage: boolean) {
+function writeRunConfig(runDir: string, coverage: boolean, benchmark: boolean) {
   fs.writeFileSync(
     path.join(runDir, 'vitest.config.js'),
     `export default {
@@ -115,7 +115,7 @@ function writeRunConfig(runDir: string, coverage: boolean) {
     environment: 'node',
     setupFiles: ['./setup.ts'],
     include: ['*.spec.ts', '*.spec.tsx', '*.test.ts', '*.test.tsx'],
-    coverage: { reporter: ['json-summary'], ${coverage ? 'enabled: true' : 'enabled: false'} },
+    coverage: { reporter: ['json-summary'], ${coverage ? 'enabled: true' : 'enabled: false'} }${benchmark ? ",\n    benchmark: { include: ['*.spec.ts', '*.spec.tsx'] }" : ''},
   },
   esbuild: { jsx: 'automatic' },
 };
@@ -215,39 +215,30 @@ function parseVitestJson(
   }
 }
 
-/** 解析 vitest bench --reporter=json 的输出 */
-function parseBenchJson(raw: string): RunResult {
-  try {
-    const data = JSON.parse(raw);
-    const lines: string[] = ['Benchmark Results', '================', ''];
-    const tests: RunResult['tests'] = [];
-    for (const file of data.files ?? []) {
-      lines.push(`📄 ${file.filepath ?? ''}`);
-      for (const g of file.groups ?? []) {
-        for (const b of g.benchmarks ?? []) {
-          const mean = typeof b.mean === 'number' ? b.mean : 0;
-          const hz = typeof b.hz === 'number' ? b.hz : 0;
-          lines.push(`  • ${b.name}: ${mean.toFixed(3)}ms (${Math.round(hz)} ops/s)`);
-          tests.push({ name: b.name, status: 'passed', duration: mean });
-        }
-      }
-      lines.push('');
-    }
-    return {
-      success: true,
-      output: lines.join('\n'),
-      passed: tests.length,
-      failed: 0,
-      tests,
-    };
-  } catch {
-    return {
-      success: false,
-      output: `基准结果解析失败，原始输出:\n${raw.slice(0, 2000)}`,
-      passed: 0,
-      failed: 1,
-    };
+/** 解析 bench 默认 reporter 的表格输出。
+ *  Vitest 4.1.8 的 bench 内置 reporter 只有 default/verbose（--reporter=json 会报
+ *  Failed to load custom Reporter），故无 JSON 可用，只能解析表格行：
+ *  `· 名称  hz  min  max  mean  p75 … samples`（hz 含千分位逗号）。 */
+export function parseBenchTable(out: string): RunResult {
+  // vitest 默认 reporter 会输出 ANSI 颜色码，逐列包裹导致表格正则失配，先剥离
+  const plain = out.replace(/\x1B\[[0-9;]*[A-Za-z]/g, '');
+  const lines: string[] = ['Benchmark Results', '================', ''];
+  const tests: RunResult['tests'] = [];
+  const rowRe = /^\s*[·✓×]\s+(.+?)\s{2,}([\d,.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/;
+  for (const line of plain.split('\n')) {
+    const m = rowRe.exec(line);
+    if (!m) continue;
+    const name = m[1].trim();
+    const hz = Number(m[2].replace(/,/g, ''));
+    const mean = Number(m[5]);
+    lines.push(`  • ${name}: ${mean.toFixed(3)}ms (${Math.round(hz)} ops/s)`);
+    tests.push({ name, status: 'passed', duration: mean });
   }
+  if (tests.length === 0) {
+    return failResult(`无法从输出解析基准结果，Vitest 输出:\n${out.slice(-2000)}`);
+  }
+  lines.push('');
+  return { success: true, output: lines.join('\n'), passed: tests.length, failed: 0, tests };
 }
 
 function readBody(req: IncomingMessage): Promise<RunBody> {
@@ -311,7 +302,7 @@ export async function runInSandbox(
 
   const runDir = await makeRunDir();
   try {
-    writeRunConfig(runDir, coverage);
+    writeRunConfig(runDir, coverage, benchmark);
     for (const [name, contents] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(runDir, name), contents);
     }
@@ -357,7 +348,7 @@ function spawnVitest(
 ): Promise<RunResult> {
   return new Promise((resolve) => {
     const args = opts.benchmark
-      ? ['bench', '--root', runDir, '--reporter=json', '--outputFile.json=result.json']
+      ? ['bench', '--root', runDir]
       : ['run', '--root', runDir, '--reporter=json', '--outputFile.json=result.json'];
     if (opts.coverage && !opts.benchmark) args.push('--coverage');
     const child = spawn('node', [VITEST_BIN, ...args], {
@@ -405,13 +396,17 @@ function spawnVitest(
   });
 }
 
-/** 优先读取 --outputFile 写出的 result.json（免疫用户 stdout 打印干扰），失败回退 stdout 截取 */
+/** 优先读取 --outputFile 写出的 result.json（免疫用户 stdout 打印干扰）；bench 无 json
+ *  reporter 可用（Vitest 4.1.8），改解析默认表格输出；test 路径回退 stdout 截取 */
 function finishRun(runDir: string, out: string, coverageData: CoverageSummary | undefined, benchmark: boolean): RunResult {
+  if (benchmark) {
+    return parseBenchTable(out);
+  }
   try {
     const resultPath = path.join(runDir, 'result.json');
     if (fs.existsSync(resultPath)) {
       const raw = fs.readFileSync(resultPath, 'utf-8');
-      return benchmark ? parseBenchJson(raw) : parseVitestJson(raw, 0, coverageData);
+      return parseVitestJson(raw, 0, coverageData);
     }
   } catch {
     /* 回退到 stdout 解析 */
@@ -420,7 +415,7 @@ function finishRun(runDir: string, out: string, coverageData: CoverageSummary | 
   if (!raw) {
     return { ...failResult(`无法从输出解析测试结果，Vitest 输出:\n${out.slice(-2000)}`), coverage: coverageData };
   }
-  return benchmark ? parseBenchJson(raw) : parseVitestJson(raw, 0, coverageData);
+  return parseVitestJson(raw, 0, coverageData);
 }
 
 /** 从 vitest --reporter=json 的 stdout 中提取 JSON 片段 */
